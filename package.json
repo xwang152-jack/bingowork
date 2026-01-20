@@ -29,6 +29,7 @@
     "test:coverage": "vitest --coverage",
     "test:electron": "vitest --config vitest.electron.config.ts",
     "lint-staged": "lint-staged",
+    "postinstall": "electron-builder install-app-deps",
     "prepare": "husky install || true"
   },
   "dependencies": {

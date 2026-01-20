@@ -81,6 +81,7 @@ app.whenReady().then(async () => {
 
     // 2. Initialize task database
     taskDb = await initializeTaskDatabase(devUserData);
+    setTaskDatabase(taskDb);
 
     // 3. Set App User Model ID for Windows notifications
     app.setAppUserModelId('com.bingowork.app');
@@ -93,7 +94,7 @@ app.whenReady().then(async () => {
     }
 
     // 5. Register IPC handlers
-    registerAllIPCHandlers();
+    registerAllIPCHandlers(taskDb);
 
     // 6. Create windows
     const windowManager = getWindowManager();
@@ -166,7 +167,7 @@ async function initializeTaskDatabase(devUserData: string | null): Promise<TaskD
     return db;
   } catch (error) {
     console.error('[Init] Task database initialization failed:', error);
-    return null;
+    throw error;
   }
 }
 

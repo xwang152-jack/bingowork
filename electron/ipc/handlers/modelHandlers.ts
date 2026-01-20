@@ -4,7 +4,7 @@ import { configStore } from '../../config/ConfigStore';
 import { SecureCredentials } from '../../config/SecureCredentials';
 import { ModelRegistryService } from '../../models/ModelRegistryService';
 import { getAgentInstance } from './agentHandlers';
-import { getTaskDatabase } from './configHandlers';
+import { TaskDatabase } from '../../config/TaskDatabase';
 
 function broadcast(channel: string, data?: unknown) {
     const windows = BrowserWindow.getAllWindows();
@@ -15,15 +15,14 @@ function broadcast(channel: string, data?: unknown) {
     });
 }
 
-function getService(): ModelRegistryService {
-    const db = getTaskDatabase();
-    if (!db) {
-        throw new Error('Task database not initialized');
+export function registerModelHandlers(taskDb: TaskDatabase | null): void {
+    function getService(): ModelRegistryService {
+        if (!taskDb) {
+            throw new Error('Task database not initialized');
+        }
+        return new ModelRegistryService(taskDb);
     }
-    return new ModelRegistryService(db);
-}
 
-export function registerModelHandlers(): void {
     ipcMain.handle(MODEL_CHANNELS.GET_STATE, async () => {
         return await getService().getState();
     });

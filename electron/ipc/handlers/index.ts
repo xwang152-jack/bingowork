@@ -14,16 +14,17 @@ import { registerMCPHandlers, setAgentInstance as setMCPAgentInstance } from './
 import { registerSkillsHandlers } from './skillsHandlers';
 import { registerFloatingBallHandlers } from './floatingBallHandlers';
 import { registerShellHandlers } from './shellHandlers';
+import type { TaskDatabase } from '../../config/TaskDatabase';
 
 /**
  * Register all IPC handlers
  * Call this during app initialization
  */
-export function registerAllIPCHandlers(): void {
+export function registerAllIPCHandlers(taskDb: TaskDatabase | null): void {
   registerAgentHandlers();
   registerSessionHandlers();
   registerConfigHandlers();
-  registerModelHandlers();
+  registerModelHandlers(taskDb);
   registerWindowHandlers();
   registerDialogHandlers();
   registerPermissionHandlers();
