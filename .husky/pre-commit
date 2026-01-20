@@ -1,0 +1,7 @@
+{
+  "name": "bingowork-pre-commit",
+  "hooks": {
+    "pre-commit": "npm run lint-staged",
+    "pre-push": "npm run typecheck && npm run test"
+  }
+}

@@ -1,0 +1,100 @@
+/**
+ * useAgent Hook
+ * Hook for interacting with the AI agent
+ */
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { AgentMessage, AgentStage } from '../../electron/types/ipc';
+import { ipcService } from '../../electron/services/IPCService.ts';
+
+export interface UseAgentResult {
+    history: AgentMessage[];
+    isProcessing: boolean;
+    stage: AgentStage;
+    streamingText: string;
+    sendMessage: (content: string, images?: string[]) => Promise<void>;
+    abort: () => Promise<void>;
+    error: string | null;
+}
+
+/**
+ * Hook for interacting with the agent
+ */
+export function useAgent(): UseAgentResult {
+    const [history, setHistory] = useState<AgentMessage[]>([]);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [stage, setStage] = useState<AgentStage>('IDLE');
+    const [error, setError] = useState<string | null>(null);
+    const [streamingText, setStreamingText] = useState('');
+    const streamingTextRef = useRef('');
+
+    useEffect(() => {
+        streamingTextRef.current = streamingText;
+    }, [streamingText]);
+
+    useEffect(() => {
+        const removeListener = window.ipcRenderer.on('agent:history-update', async (_event, updatedHistory) => {
+            setHistory(updatedHistory as AgentMessage[]);
+            setIsProcessing(false);
+            setStreamingText('');
+            // Auto-save session
+            try {
+                // Create a clean copy without any non-serializable properties
+                const cleanHistory = JSON.parse(JSON.stringify(updatedHistory));
+                await window.ipcRenderer.invoke('session:save', cleanHistory);
+            } catch (err) {
+                console.error('Failed to save session:', err);
+            }
+        });
+
+        const removeErrorListener = window.ipcRenderer.on('agent:error', (_event, err) => {
+            console.error('Agent Error:', err);
+            setError(err as string);
+            setIsProcessing(false);
+            setStreamingText('');
+        });
+
+        const removeStageListener = window.ipcRenderer.on('agent:stage', (_event, newStage) => {
+            setStage((newStage as { stage: AgentStage }).stage);
+        });
+
+        const removeStreamListener = window.ipcRenderer.on('agent:stream-token', (_event, token) => {
+            const newStreamingText = streamingTextRef.current + (token as string);
+            streamingTextRef.current = newStreamingText;
+            setStreamingText(newStreamingText);
+        });
+
+        return () => {
+            removeListener();
+            removeErrorListener();
+            removeStageListener();
+            removeStreamListener();
+        };
+    }, []);
+
+    const sendMessage = useCallback(async (content: string, images?: string[]) => {
+        setIsProcessing(true);
+        setError(null);
+        try {
+            await ipcService.sendMessage(content, images);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+            setIsProcessing(false);
+        }
+    }, []);
+
+    const abort = useCallback(async () => {
+        await ipcService.abortAgent();
+        setIsProcessing(false);
+    }, []);
+
+    return {
+        history,
+        isProcessing,
+        stage,
+        streamingText,
+        sendMessage,
+        abort,
+        error,
+    };
+}

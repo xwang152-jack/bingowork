@@ -1,0 +1,898 @@
+import { useState, useEffect } from 'react';
+import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye } from 'lucide-react';
+import { SkillEditor } from './SkillEditor';
+import { useModelRegistry } from '../hooks/useModelRegistry';
+
+// Constants
+const UI_TIMEOUTS = {
+    SETTINGS_SAVED: 2000,
+} as const;
+
+interface SettingsViewProps {
+    onClose: () => void;
+}
+
+interface Config {
+    provider: 'anthropic' | 'openai' | 'minimax';
+    apiKey: string;
+    apiKeys?: Record<string, string>;
+    apiUrl: string;
+    model: string;
+    authorizedFolders: string[];
+    networkAccess: boolean;
+    browserAccess: boolean;
+    shortcut: string;
+}
+
+/**
+ * Settings View Component
+ * Handles application configuration and settings management
+ */
+
+interface SkillInfo {
+    id: string;
+    name: string;
+    path: string;
+    isBuiltin: boolean;
+}
+
+interface ToolPermission {
+    tool: string;
+    pathPattern?: string;
+    grantedAt: number;
+}
+
+export function SettingsView({ onClose }: SettingsViewProps) {
+    const [config, setConfig] = useState<Config>({
+        provider: 'anthropic',
+        apiKey: '',
+        apiKeys: { anthropic: '', openai: '', minimax: '' },
+        apiUrl: 'https://open.bigmodel.cn/api/anthropic',
+        model: 'glm-4.7',
+        authorizedFolders: [],
+        networkAccess: true,
+        browserAccess: false,
+        shortcut: 'Alt+Space'
+    });
+    const [saved, setSaved] = useState(false);
+    const [activeTab, setActiveTab] = useState<'api' | 'folders' | 'mcp' | 'skills' | 'advanced'>('api');
+    const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+
+    // MCP State
+    const [mcpConfig, setMcpConfig] = useState('');
+    const [mcpSaved, setMcpSaved] = useState(false);
+
+    // Skills State
+    const [skills, setSkills] = useState<SkillInfo[]>([]);
+    const [editingSkill, setEditingSkill] = useState<string | null>(null);
+    const [viewingSkill, setViewingSkill] = useState<boolean>(false); // New state for read-only mode
+    const [showSkillEditor, setShowSkillEditor] = useState(false);
+
+    // Permissions State
+    const [permissions, setPermissions] = useState<ToolPermission[]>([]);
+
+    const { state: modelState, updateProvider, addCustomModel, deleteCustomModel, setActiveModel, error: modelError } = useModelRegistry();
+    const [providerDraft, setProviderDraft] = useState<Record<string, { baseUrl: string; apiKeyDraft: string }>>({});
+    const [selectedProviderId, setSelectedProviderId] = useState<string>('');
+    const [newModelDraft, setNewModelDraft] = useState<{ providerSelect: string; customProviderName: string; modelId: string; displayName: string; baseUrl: string; apiKey: string; protocol: 'openai' | 'anthropic' }>({
+        providerSelect: '',
+        customProviderName: '',
+        modelId: '',
+        displayName: '',
+        baseUrl: '',
+        apiKey: '',
+        protocol: 'openai',
+    });
+
+    const loadPermissions = () => {
+        window.ipcRenderer.invoke('permissions:list').then(list => setPermissions(list as ToolPermission[]));
+    };
+
+    const revokePermission = async (tool: string, pathPattern?: string) => {
+        await window.ipcRenderer.invoke('permissions:revoke', { tool, pathPattern });
+        loadPermissions();
+    };
+
+    const clearAllPermissions = async () => {
+        if (confirm('确定要清除所有已授权的权限吗？')) {
+            await window.ipcRenderer.invoke('permissions:clear');
+            loadPermissions();
+        }
+    };
+
+    useEffect(() => {
+        window.ipcRenderer.invoke('config:get-all').then(async (cfg) => {
+            if (cfg) {
+                const config = cfg as Config;
+                // Load the API key for the current provider from secure storage
+                const apiKey = await window.ipcRenderer.invoke('config:get-api-key', config.provider) as string;
+                setConfig({
+                    ...config,
+                    apiKey,
+                    apiKeys: {
+                        ...config.apiKeys,
+                        [config.provider]: apiKey
+                    }
+                });
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!modelState) return;
+        setProviderDraft((prev) => {
+            const next: Record<string, { baseUrl: string; apiKeyDraft: string }> = { ...prev };
+            for (const p of modelState.providers) {
+                if (!next[p.providerId]) {
+                    next[p.providerId] = { baseUrl: p.baseUrl, apiKeyDraft: '' };
+                } else {
+                    next[p.providerId] = { ...next[p.providerId], baseUrl: p.baseUrl };
+                }
+            }
+            return next;
+        });
+        if (!selectedProviderId) {
+            const first = modelState.providers[0]?.providerId;
+            if (first) setSelectedProviderId(first);
+        }
+        if (!newModelDraft.providerSelect) {
+            const first = modelState.providers[0]?.providerId;
+            if (first) {
+                setNewModelDraft(prev => ({ ...prev, providerSelect: first }));
+            }
+        }
+    }, [modelState]);
+
+    useEffect(() => {
+        if (activeTab === 'mcp') {
+            window.ipcRenderer.invoke('mcp:get-config').then(cfg => setMcpConfig(cfg as string));
+        } else if (activeTab === 'skills') {
+            refreshSkills();
+        } else if (activeTab === 'advanced') {
+            loadPermissions();
+        }
+    }, [activeTab]);
+
+    // Shortcut recording handler
+    const handleShortcutKeyDown = (e: React.KeyboardEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const parts: string[] = [];
+        if (e.ctrlKey) parts.push('Ctrl');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        if (e.metaKey) parts.push('Meta');
+
+        // Add the actual key (filter out modifier keys)
+        const key = e.key;
+        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
+            // Normalize key names
+            const normalizedKey = key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key;
+            parts.push(normalizedKey);
+        }
+
+        // Allow single function keys (F1-F12) or modifier + key combinations
+        const isFunctionKey = /^F\d{1,2}$/.test(parts[parts.length - 1] || '');
+        if (parts.length >= 1 && (isFunctionKey || parts.length >= 2)) {
+            const newShortcut = parts.join('+');
+            setConfig({ ...config, shortcut: newShortcut });
+            setIsRecordingShortcut(false);
+            // Update the global shortcut via IPC
+            window.ipcRenderer.invoke('shortcut:update', newShortcut);
+        }
+    };
+
+    const refreshSkills = () => {
+        window.ipcRenderer.invoke('skills:list').then(list => setSkills(list as SkillInfo[]));
+    };
+
+    const handleSave = async () => {
+        await window.ipcRenderer.invoke('config:set-all', config);
+
+        if (modelState) {
+            for (const p of modelState.providers) {
+                const draft = providerDraft[p.providerId];
+                if (!draft) continue;
+                const payload: { providerId: string; baseUrl?: string; apiKey?: string } = {
+                    providerId: p.providerId,
+                    baseUrl: draft.baseUrl,
+                };
+                if (draft.apiKeyDraft && draft.apiKeyDraft.trim()) {
+                    payload.apiKey = draft.apiKeyDraft;
+                }
+                await updateProvider(payload);
+            }
+        }
+        setSaved(true);
+        setTimeout(() => {
+            setSaved(false);
+            onClose();
+        }, 800);
+    };
+
+    const saveMcpConfig = async () => {
+        try {
+            // Validate JSON
+            JSON.parse(mcpConfig);
+            await window.ipcRenderer.invoke('mcp:save-config', mcpConfig);
+            setMcpSaved(true);
+            setTimeout(() => setMcpSaved(false), UI_TIMEOUTS.SETTINGS_SAVED);
+        } catch (e) {
+            alert('Invalid JSON configuration');
+        }
+    };
+
+    const deleteSkill = async (filename: string) => {
+        if (confirm(`确定要删除技能 "${filename}" 吗？`)) {
+            await window.ipcRenderer.invoke('skills:delete', filename);
+            refreshSkills();
+        }
+    };
+
+    const addFolder = async () => {
+        const result = await window.ipcRenderer.invoke('dialog:select-folder') as string | null;
+        if (result && !config.authorizedFolders.includes(result)) {
+            setConfig({ ...config, authorizedFolders: [...config.authorizedFolders, result] });
+        }
+    };
+
+    const removeFolder = (folder: string) => {
+        setConfig({ ...config, authorizedFolders: config.authorizedFolders.filter(f => f !== folder) });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white/95 backdrop-blur-md rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] border border-stone-200/60">
+                {/* Header */}
+                <div className="flex items-center justify-between p-5 border-b border-stone-200/60 shrink-0">
+                    <h2 className="text-lg font-semibold text-stone-800 tracking-tight">设置</h2>
+                    <div className="flex items-center gap-2">
+                        {activeTab === 'api' || activeTab === 'folders' || activeTab === 'advanced' ? (
+                            <button
+                                type="button"
+                                onClick={handleSave}
+                                disabled={saved}
+                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${saved
+                                    ? 'bg-emerald-100 text-emerald-600'
+                                    : 'bg-gradient-to-r from-[#E85D3E] to-[#d14a2e] text-white hover:from-[#d14a2e] hover:to-[#b53d26] shadow-sm'
+                                    } focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D3E]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white`}
+                            >
+                                {saved ? <Check size={14} /> : null}
+                                {saved ? '已保存' : '保存'}
+                            </button>
+                        ) : null}
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="关闭设置"
+                            className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D3E]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex border-b border-stone-200/60 overflow-x-auto shrink-0" role="tablist" aria-label="设置选项卡">
+                    {[
+                        { id: 'api' as const, label: '通用', icon: <Settings size={14} /> },
+                        { id: 'folders' as const, label: '权限', icon: <FolderOpen size={14} /> },
+                        { id: 'mcp' as const, label: 'MCP', icon: <Server size={14} /> },
+                        { id: 'skills' as const, label: 'Skills', icon: <Zap size={14} /> },
+                        { id: 'advanced' as const, label: '高级', icon: <Settings size={14} /> },
+                    ].map(tab => (
+                        <button
+                            type="button"
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            role="tab"
+                            id={`settings-tab-${tab.id}`}
+                            aria-selected={activeTab === tab.id}
+                            aria-controls={`settings-panel-${tab.id}`}
+                            className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+                                ? 'text-[#E85D3E] border-b-2 border-[#E85D3E] bg-orange-50/50'
+                                : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50/80'
+                                } focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D3E]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white`}
+                        >
+                            {/*tab.icon*/}
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Content */}
+                <div className="p-0 overflow-y-auto flex-1 bg-stone-50/50 custom-scrollbar">
+                    <div className="p-6">
+                        {activeTab === 'api' && (
+                            <div
+                                role="tabpanel"
+                                id="settings-panel-api"
+                                aria-labelledby="settings-tab-api"
+                                className="space-y-5"
+                            >
+                                {modelError ? (
+                                    <div className="bg-red-50 text-red-700 rounded-lg p-3 text-xs">
+                                        {modelError}
+                                    </div>
+                                ) : null}
+
+                                <div className="bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-2xl p-5 shadow-sm">
+                                    <div className="text-sm font-semibold text-stone-800 mb-4 tracking-tight">供应商配置</div>
+                                    {modelState?.providers?.length ? (
+                                        (() => {
+                                            const provider = modelState.providers.find(p => p.providerId === selectedProviderId) || modelState.providers[0];
+                                            if (!provider) return null;
+                                            const draft = providerDraft[provider.providerId] || { baseUrl: provider.baseUrl, apiKeyDraft: '' };
+                                            const placeholder = provider.hasApiKey ? '已配置（留空表示不修改）' : '请输入 API Key';
+                                            const modelsOfProvider = (modelState.models || []).filter(m => m.providerId === provider.providerId);
+                                            const activeModel = (modelState.models || []).find(m => m.id === modelState.activeModelId);
+                                            const activeModelIdForProvider = activeModel?.providerId === provider.providerId ? activeModel?.id : (modelsOfProvider[0]?.id || '');
+
+                                            return (
+                                                <div className="space-y-3">
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <label className="text-xs font-medium text-stone-500">供应商名称</label>
+                                                            <span className="text-xs text-stone-400">{provider.protocol === 'anthropic' ? 'Anthropic 兼容' : 'OpenAI 兼容'}</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            <select
+                                                                value={provider.providerId}
+                                                                onChange={(e) => setSelectedProviderId(e.target.value)}
+                                                                className="w-full bg-white border border-stone-200/60 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E85D3E]/20 focus:border-[#E85D3E] transition-all"
+                                                            >
+                                                                {modelState.providers.map(p => (
+                                                                    <option key={p.providerId} value={p.providerId}>{p.providerName}</option>
+                                                                ))}
+                                                            </select>
+                                                            <input
+                                                                type="text"
+                                                                value={provider.providerId}
+                                                                readOnly
+                                                                className="w-full bg-stone-50 border border-stone-200/60 rounded-xl px-3 py-2.5 text-sm font-mono text-stone-500"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        <label className="text-xs font-medium text-stone-500">Model ID</label>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            <select
+                                                                value={activeModelIdForProvider}
+                                                                onChange={(e) => { void setActiveModel(e.target.value); }}
+                                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                                            >
+                                                                {modelsOfProvider.map(m => (
+                                                                    <option key={m.id} value={m.id}>
+                                                                        {m.modelId}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                            <input
+                                                                type="text"
+                                                                value={(activeModel?.providerId === provider.providerId ? activeModel?.modelId : modelsOfProvider[0]?.modelId) || ''}
+                                                                readOnly
+                                                                className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono text-stone-500"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        <label className="text-xs font-medium text-stone-500">Base URL</label>
+                                                        <input
+                                                            type="text"
+                                                            value={draft.baseUrl}
+                                                            onChange={(e) => setProviderDraft(prev => ({ ...prev, [provider.providerId]: { ...draft, baseUrl: e.target.value } }))}
+                                                            placeholder={provider.defaultBaseUrl || 'https://...'}
+                                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                                        />
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="text-xs font-medium text-stone-500">API Key</label>
+                                                            <span className={`text-xs ${provider.hasApiKey ? 'text-green-600' : 'text-stone-400'}`}>{provider.hasApiKey ? '已配置' : '未配置'}</span>
+                                                        </div>
+                                                        <input
+                                                            type="password"
+                                                            value={draft.apiKeyDraft}
+                                                            onChange={(e) => setProviderDraft(prev => ({ ...prev, [provider.providerId]: { ...draft, apiKeyDraft: e.target.value } }))}
+                                                            placeholder={placeholder}
+                                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                                        />
+                                                    </div>
+
+                                                    <div className="bg-stone-50/60 rounded-lg border border-stone-200 p-3">
+                                                        <div className="text-xs font-medium text-stone-600 mb-2">该供应商下的模型</div>
+                                                        {modelsOfProvider.length ? (
+                                                            <div className="space-y-2">
+                                                                {modelsOfProvider.map((m) => (
+                                                                    <div key={m.id} className="flex items-start justify-between gap-3">
+                                                                        <div className="min-w-0">
+                                                                            <div className="text-sm text-stone-700 truncate">
+                                                                                {m.displayName}{m.isConfigured ? '' : '（待配置）'}
+                                                                            </div>
+                                                                            <div className="text-xs text-stone-400 font-mono truncate">model: {m.modelId}</div>
+                                                                            <div className="text-xs text-stone-400 font-mono truncate">baseUrl: {m.effectiveBaseUrl || '-'}</div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 shrink-0">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => { void setActiveModel(m.id); }}
+                                                                                className={`px-2 py-1 rounded-lg text-xs border transition-colors ${modelState.activeModelId === m.id ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                                                                            >
+                                                                                {modelState.activeModelId === m.id ? '当前' : '设为当前'}
+                                                                            </button>
+                                                                            {m.isCustom ? (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={async () => {
+                                                                                        if (confirm(`确定要删除自定义模型 "${m.displayName}" 吗？`)) {
+                                                                                            await deleteCustomModel(m.id);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                                                                    aria-label="删除模型"
+                                                                                >
+                                                                                    <Trash2 size={16} />
+                                                                                </button>
+                                                                            ) : null}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-xs text-stone-400">暂无模型</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()
+                                    ) : (
+                                        <div className="text-xs text-stone-400">正在加载供应商列表...</div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white border border-stone-200 rounded-xl p-4 space-y-3">
+                                    <div className="text-sm font-medium text-stone-800">增加模型</div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <select
+                                                value={newModelDraft.providerSelect || ''}
+                                                onChange={(e) => {
+                                                    const nextProviderSelect = e.target.value;
+                                                    if (nextProviderSelect !== '__custom__') {
+                                                        const nextBaseUrl = providerDraft[nextProviderSelect]?.baseUrl || '';
+                                                        setNewModelDraft(prev => ({ ...prev, providerSelect: nextProviderSelect, baseUrl: nextBaseUrl, apiKey: '' }));
+                                                        return;
+                                                    }
+                                                    setNewModelDraft(prev => ({ ...prev, providerSelect: nextProviderSelect, baseUrl: '', apiKey: '' }));
+                                                }}
+                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                            >
+                                                {(modelState?.providers || []).map(p => (
+                                                    <option key={p.providerId} value={p.providerId}>{p.providerName}</option>
+                                                ))}
+                                                <option value="__custom__">自定义供应商...</option>
+                                            </select>
+                                            <input
+                                                type="text"
+                                                value={newModelDraft.providerSelect === '__custom__'
+                                                    ? newModelDraft.customProviderName
+                                                    : String(modelState?.providers?.find(p => p.providerId === newModelDraft.providerSelect)?.providerName || '')
+                                                }
+                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, customProviderName: e.target.value }))}
+                                                placeholder="供应商名称（选择“自定义供应商...”时填写）"
+                                                className={`w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 ${newModelDraft.providerSelect === '__custom__' ? 'bg-white' : 'bg-stone-50 text-stone-500'}`}
+                                                readOnly={newModelDraft.providerSelect !== '__custom__'}
+                                            />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={newModelDraft.modelId}
+                                            onChange={(e) => setNewModelDraft(prev => ({ ...prev, modelId: e.target.value }))}
+                                            placeholder="Model ID（例如：deepseek-chat）"
+                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={newModelDraft.displayName}
+                                            onChange={(e) => setNewModelDraft(prev => ({ ...prev, displayName: e.target.value }))}
+                                            placeholder="显示名称（可选）"
+                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                        />
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <input
+                                                type="text"
+                                                value={newModelDraft.baseUrl}
+                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, baseUrl: e.target.value }))}
+                                                placeholder={newModelDraft.providerSelect === '__custom__' ? 'Base URL（必填）' : 'Base URL（留空则使用该供应商已保存的 Base URL）'}
+                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                            />
+                                            <input
+                                                type="password"
+                                                value={newModelDraft.apiKey}
+                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, apiKey: e.target.value }))}
+                                                placeholder={newModelDraft.providerSelect === '__custom__' ? 'API Key（必填）' : 'API Key（留空表示不修改该供应商已配置的 Key）'}
+                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <select
+                                                value={newModelDraft.protocol}
+                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, protocol: e.target.value as 'openai' | 'anthropic' }))}
+                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                                            >
+                                                <option value="openai">OpenAI 兼容</option>
+                                                <option value="anthropic">Anthropic 兼容</option>
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    const providerName = newModelDraft.providerSelect === '__custom__'
+                                                        ? String(newModelDraft.customProviderName || '').trim()
+                                                        : String(modelState?.providers?.find(p => p.providerId === newModelDraft.providerSelect)?.providerName || '').trim();
+                                                    const normalizedProviderName = String(providerName || '').trim();
+                                                    if (!normalizedProviderName) {
+                                                        alert('请选择或填写供应商名称');
+                                                        return;
+                                                    }
+                                                    if (newModelDraft.providerSelect === '__custom__') {
+                                                        if (!String(newModelDraft.baseUrl || '').trim()) {
+                                                            alert('请填写 Base URL');
+                                                            return;
+                                                        }
+                                                        if (!String(newModelDraft.apiKey || '').trim()) {
+                                                            alert('请填写 API Key');
+                                                            return;
+                                                        }
+                                                    }
+                                                    if (!String(newModelDraft.modelId || '').trim()) {
+                                                        alert('请填写 Model ID');
+                                                        return;
+                                                    }
+
+                                                    await addCustomModel({
+                                                        providerName: normalizedProviderName,
+                                                        modelId: newModelDraft.modelId,
+                                                        displayName: newModelDraft.displayName || undefined,
+                                                        baseUrl: String(newModelDraft.baseUrl || '').trim() ? newModelDraft.baseUrl : undefined,
+                                                        apiKey: String(newModelDraft.apiKey || '').trim() ? newModelDraft.apiKey : undefined,
+                                                        protocol: newModelDraft.protocol,
+                                                    });
+                                                    setNewModelDraft({ providerSelect: modelState?.providers?.[0]?.providerId ?? '', customProviderName: '', modelId: '', displayName: '', baseUrl: '', apiKey: '', protocol: 'openai' });
+                                                }}
+                                                className="w-full py-2 border border-dashed border-stone-300 text-stone-600 hover:text-orange-600 hover:border-orange-500 hover:bg-orange-50 rounded-lg transition-all flex items-center justify-center gap-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                            >
+                                                <Plus size={16} />
+                                                增加模型
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border border-stone-200 rounded-xl p-4">
+                                    <div className="text-sm font-medium text-stone-800 mb-3">模型列表</div>
+                                    {modelState?.models?.length ? (
+                                        <div className="space-y-2">
+                                            {modelState.models.map((m) => (
+                                                <div key={m.id} className="flex items-center justify-between p-3 bg-stone-50/60 rounded-lg border border-stone-200">
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-medium text-stone-700 truncate">
+                                                            {m.providerName} / {m.displayName}{m.isConfigured ? '' : '（待配置）'}
+                                                        </div>
+                                                        <div className="text-xs text-stone-400 font-mono truncate">{m.modelId}</div>
+                                                        <div className="text-xs text-stone-400 font-mono truncate">{m.effectiveBaseUrl || '-'}</div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { void setActiveModel(m.id); }}
+                                                            className={`px-2 py-1 rounded-lg text-xs border transition-colors ${modelState.activeModelId === m.id ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                                                        >
+                                                            {modelState.activeModelId === m.id ? '当前' : '设为当前'}
+                                                        </button>
+                                                        {m.isCustom ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    if (confirm(`确定要删除自定义模型 "${m.displayName}" 吗？`)) {
+                                                                        await deleteCustomModel(m.id);
+                                                                    }
+                                                                }}
+                                                                className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                                                aria-label="删除模型"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-stone-400">暂无模型</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'folders' && (
+                            <div
+                                role="tabpanel"
+                                id="settings-panel-folders"
+                                aria-labelledby="settings-tab-folders"
+                                className="space-y-5"
+                            >
+                                <div className="bg-blue-50 text-blue-700 rounded-lg p-3 text-xs">
+                                    出于安全考虑，AI 只能访问以下授权的文件夹及其子文件夹。
+                                </div>
+
+                                {config.authorizedFolders.length === 0 ? (
+                                    <div className="text-center py-8 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
+                                        <p className="text-sm">暂无授权文件夹</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {config.authorizedFolders.map((folder, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="flex items-center justify-between p-3 bg-white border border-stone-200 rounded-lg group"
+                                            >
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <FolderOpen size={16} className="text-stone-400 shrink-0" />
+                                                    <span className="text-sm font-mono text-stone-600 truncate">
+                                                        {folder}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeFolder(folder)}
+                                                    aria-label={`移除文件夹 ${folder}`}
+                                                    className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    onClick={addFolder}
+                                    className="w-full py-2.5 border border-dashed border-stone-300 text-stone-500 hover:text-orange-600 hover:border-orange-500 hover:bg-orange-50 rounded-xl transition-all flex items-center justify-center gap-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                >
+                                    <Plus size={16} />
+                                    添加文件夹
+                                </button>
+                            </div>
+                        )}
+
+                        {activeTab === 'mcp' && (
+                            <div role="tabpanel" id="settings-panel-mcp" aria-labelledby="settings-tab-mcp" className="h-full flex flex-col">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-stone-500">mcp.json 配置</span>
+                                    <button
+                                        type="button"
+                                        onClick={saveMcpConfig}
+                                        className={`text-xs px-2 py-1 rounded transition-colors ${mcpSaved ? 'bg-green-100 text-green-600' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                            } focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white`}
+                                    >
+                                        {mcpSaved ? '已保存' : '保存配置'}
+                                    </button>
+                                </div>
+                                <textarea
+                                    value={mcpConfig}
+                                    onChange={(e) => setMcpConfig(e.target.value)}
+                                    className="w-full h-[320px] bg-white border border-stone-200 rounded-lg p-3 font-mono text-xs focus:outline-none focus:border-orange-500 resize-none text-stone-700"
+                                    placeholder='{ "mcpServers": { ... } }'
+                                    spellCheck={false}
+                                />
+                                <p className="text-[10px] text-stone-400 mt-2">
+                                    配置将保存在 ~/.bingowork/mcp.json（保留用于向后兼容）。请确保 JSON 格式正确。
+                                </p>
+
+                            </div>
+                        )}
+
+                        {activeTab === 'skills' && (
+                            <div role="tabpanel" id="settings-panel-skills" aria-labelledby="settings-tab-skills" className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-stone-500">自定义 AI 技能</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditingSkill(null);
+                                            setShowSkillEditor(true);
+                                        }}
+                                        className="flex items-center gap-1 text-xs px-2 py-1 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                    >
+                                        <Plus size={12} />
+                                        新建技能
+                                    </button>
+                                </div>
+
+                                {skills.length === 0 ? (
+                                    <div className="text-center py-8 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
+                                        <p className="text-sm">暂无技能</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {skills.map((skill) => (
+                                            <div
+                                                key={skill.id}
+                                                className="flex items-center justify-between p-3 bg-white border border-stone-200 rounded-lg hover:border-orange-200 transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${skill.isBuiltin ? 'bg-orange-50 text-orange-600' : 'bg-purple-50 text-purple-600'}`}>
+                                                        <Zap size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-sm font-medium text-stone-700">{skill.name}</p>
+                                                            {skill.isBuiltin && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded-full font-medium">内置</span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[10px] text-stone-400 font-mono truncate max-w-xs">{skill.path}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditingSkill(skill.id);
+                                                            setViewingSkill(skill.isBuiltin); // Set view-only if built-in
+                                                            setShowSkillEditor(true);
+                                                        }}
+                                                        aria-label={skill.isBuiltin ? `查看技能 ${skill.name}` : `编辑技能 ${skill.name}`}
+                                                        className="p-1.5 text-stone-400 hover:text-blue-500 hover:bg-blue-50 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                                        title={skill.isBuiltin ? "查看" : "编辑"}
+                                                    >
+                                                        {skill.isBuiltin ? <Eye size={14} /> : <Edit2 size={14} />}
+                                                    </button>
+                                                    {!skill.isBuiltin && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => deleteSkill(skill.id)}
+                                                            aria-label={`删除技能 ${skill.name}`}
+                                                            className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                                            title="删除"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'advanced' && (
+                            <div
+                                role="tabpanel"
+                                id="settings-panel-advanced"
+                                aria-labelledby="settings-tab-advanced"
+                                className="space-y-5"
+                            >
+                                <div className="flex items-center justify-between p-3 bg-white border border-stone-200 rounded-lg">
+                                    <div>
+                                        <p className="text-sm font-medium text-stone-700">网络访问</p>
+                                        <p className="text-xs text-stone-400">允许 AI 访问互联网（影响 MCP、浏览器及网络工具）</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfig({ ...config, networkAccess: !config.networkAccess })}
+                                        role="switch"
+                                        aria-checked={config.networkAccess}
+                                        aria-label="网络访问"
+                                        className={`w-10 h-6 rounded-full transition-colors ${config.networkAccess ? 'bg-orange-500' : 'bg-stone-200'} focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white`}
+                                    >
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform mx-1 ${config.networkAccess ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between p-3 bg-white border border-stone-200 rounded-lg">
+                                    <div>
+                                        <p className="text-sm font-medium text-stone-700">浏览器操作</p>
+                                        <p className="text-xs text-stone-400">允许 AI 操作浏览器（需先安装 agent-browser）</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfig({ ...config, browserAccess: !config.browserAccess })}
+                                        role="switch"
+                                        aria-checked={config.browserAccess}
+                                        aria-label="浏览器操作"
+                                        className={`w-10 h-6 rounded-full transition-colors ${config.browserAccess ? 'bg-orange-500' : 'bg-stone-200'} focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white`}
+                                    >
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform mx-1 ${config.browserAccess ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between p-3 bg-white border border-stone-200 rounded-lg">
+                                    <div>
+                                        <p className="text-sm font-medium text-stone-700">快捷键</p>
+                                        <p className="text-xs text-stone-400">{config.shortcut} 呼出悬浮球</p>
+                                    </div>
+                                    {isRecordingShortcut ? (
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            aria-label="录制快捷键"
+                                            className="px-3 py-1.5 text-sm border border-orange-400 rounded-lg bg-orange-50 text-orange-600 font-medium outline-none animate-pulse"
+                                            placeholder="按下快捷键..."
+                                            onKeyDown={handleShortcutKeyDown}
+                                            onBlur={() => setIsRecordingShortcut(false)}
+                                            readOnly
+                                        />
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsRecordingShortcut(true)}
+                                            aria-label="修改快捷键"
+                                            className="px-3 py-1.5 text-sm border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                        >
+                                            {config.shortcut}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Permissions Management */}
+                                <div className="space-y-2">
+                                    <p className="text-sm font-medium text-stone-700">已授权的权限</p>
+                                    {permissions.length === 0 ? (
+                                        <p className="text-xs text-stone-400 p-3 bg-stone-50 rounded-lg">暂无已保存的权限</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {permissions.map((p, idx) => (
+                                                <div key={idx} className="flex items-center justify-between p-2 bg-white border border-stone-200 rounded-lg">
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-mono text-stone-700">{p.tool}</p>
+                                                        <p className="text-xs text-stone-400">{p.pathPattern === '*' ? '所有路径' : p.pathPattern}</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => revokePermission(p.tool, p.pathPattern)}
+                                                        className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                                    >
+                                                        撤销
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                onClick={clearAllPermissions}
+                                                className="w-full px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                            >
+                                                清除所有权限
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Skill Editor Modal */}
+            {showSkillEditor && (
+                <SkillEditor
+                    filename={editingSkill}
+                    readOnly={viewingSkill}
+                    onClose={() => {
+                        setShowSkillEditor(false);
+                        setViewingSkill(false);
+                    }}
+                    onSave={refreshSkills}
+                />
+            )}
+        </div>
+    );
+}
+
+export default SettingsView;

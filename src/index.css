@@ -1,0 +1,381 @@
+@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Claude-inspired Light Theme - Refined & Elegant */
+    --background: 40 25% 97%;      /* Softer warm cream */
+    --foreground: 25 8% 12%;       /* Near-black for text */
+
+    --card: 0 0% 100%;
+    --card-foreground: 25 8% 12%;
+
+    --primary: 28 88% 62%;         /* Refined terracotta */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 20% 96%;
+    --secondary-foreground: 25 8% 20%;
+
+    --muted: 40 15% 92%;
+    --muted-foreground: 25 6% 50%;
+
+    --accent: 40 20% 94%;
+    --accent-foreground: 25 8% 20%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 40 12% 90%;
+    --input: 40 12% 90%;
+    --ring: 28 88% 62%;
+
+    --radius: 0.875rem;
+
+    /* Claude-specific colors */
+    --sidebar-bg: 40 25% 97%;
+    --chat-bg: 0 0% 100%;
+    --message-user-bg: 28 88% 62%;
+    --message-ai-bg: 0 0% 100%;
+    --hover-bg: 40 15% 92%;
+    --active-bg: 0 0% 100%;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(25 8% 5% / 0.04);
+    --shadow: 0 4px 12px 0 rgb(25 8% 5% / 0.06);
+    --shadow-md: 0 8px 24px 0 rgb(25 8% 5% / 0.08);
+    --shadow-lg: 0 16px 48px 0 rgb(25 8% 5% / 0.10);
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    /* Claude-inspired Dark Theme - Deep & Refined */
+    --background: 240 10% 8%;      /* Deep blue-black */
+    --foreground: 0 0% 97%;
+
+    --card: 240 10% 12%;
+    --card-foreground: 0 0% 97%;
+
+    --primary: 28 88% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 10% 14%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 240 8% 18%;
+    --muted-foreground: 0 0% 55%;
+
+    --accent: 240 10% 14%;
+    --accent-foreground: 0 0% 90%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 95%;
+
+    --border: 240 8% 20%;
+    --input: 240 8% 20%;
+    --ring: 28 88% 62%;
+
+    /* Claude-specific dark colors */
+    --sidebar-bg: 240 10% 8%;
+    --chat-bg: 240 10% 6%;
+    --message-user-bg: 28 88% 62%;
+    --message-ai-bg: 240 10% 12%;
+    --hover-bg: 240 8% 18%;
+    --active-bg: 240 10% 12%;
+
+    /* Dark mode shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0% 0% / 0.3);
+    --shadow: 0 4px 12px 0 rgb(0 0% 0% / 0.4);
+    --shadow-md: 0 8px 24px 0 rgb(0 0% 0% / 0.5);
+    --shadow-lg: 0 16px 48px 0 rgb(0 0% 0% / 0.6);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'kern' 1;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    letter-spacing: -0.01em;
+    line-height: 1.6;
+  }
+
+  /* Floating ball window needs transparent background */
+  html.floating-ball-mode,
+  html.floating-ball-mode body {
+    background: transparent !important;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  html.floating-ball-mode body {
+    margin: 0;
+    padding: 0;
+  }
+
+  html.floating-ball-mode #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Typography scale */
+  h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+  }
+
+  /* Code font */
+  code, pre {
+    font-family: 'IBM Plex Mono', 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  }
+}
+
+@layer components {
+  /* Claude-inspired Message Bubbles */
+  .user-bubble {
+    @apply bg-[#E8E4DF] text-stone-800 rounded-3xl px-6 py-4 leading-relaxed shadow-sm;
+  }
+
+  /* Refined Command/Tool Blocks */
+  .command-block {
+    @apply bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-2xl overflow-hidden;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+  }
+
+  .command-block:hover {
+    box-shadow: var(--shadow);
+  }
+
+  .command-block-header {
+    @apply flex items-center justify-between px-5 py-4 cursor-pointer;
+    transition: background-color var(--transition-fast);
+  }
+
+  .command-block-header:hover {
+    background-color: hsl(var(--hover-bg));
+  }
+
+  /* Steps Indicator */
+  .steps-indicator {
+    @apply flex items-center gap-2 text-sm text-stone-400 pl-5 border-l-2 border-stone-200 ml-1;
+  }
+
+  /* Refined Input Bar */
+  .input-bar {
+    @apply bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-3xl flex items-center;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+  }
+
+  .input-bar:focus-within {
+    @apply border-stone-300;
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1), var(--shadow);
+  }
+
+  .input-bar-dark {
+    @apply bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/60 rounded-3xl overflow-hidden;
+  }
+
+  /* Floating Ball */
+  .floating-ball {
+    @apply w-16 h-16 rounded-full bg-stone-800 flex items-center justify-center cursor-pointer;
+    box-shadow: var(--shadow-lg);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+  }
+
+  .floating-ball:hover {
+    transform: scale(1.05);
+    box-shadow: 0 20px 60px 0 rgb(25 8% 5% / 0.15);
+  }
+
+  /* Claude-inspired Sidebar Styles */
+  .sidebar-section {
+    @apply px-5 py-3;
+  }
+
+  .sidebar-item {
+    @apply px-4 py-3 rounded-xl cursor-pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .sidebar-item:hover {
+    background-color: hsl(var(--hover-bg));
+  }
+
+  .sidebar-item.active {
+    @apply bg-white shadow-sm;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Message Container */
+  .message-container {
+    @apply px-6 py-5;
+  }
+
+  /* Button Styles */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-medium;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-xl hover:bg-stone-100/80;
+    transition: background-color var(--transition-fast);
+  }
+
+  /* Tab Switcher */
+  .tab-switcher {
+    @apply flex p-1.5 bg-stone-200/50 rounded-2xl;
+  }
+
+  .tab-button {
+    @apply flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200;
+  }
+
+  .tab-button.active {
+    @apply bg-white shadow-sm;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-stone-300 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-stone-400;
+  }
+}
+
+/* Claude-inspired Scrollbar - Subtle & Refined */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-slow) ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn var(--transition-base) ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--transition-base) ease-out;
+}
+
+/* Staggered animation delays */
+.animate-delay-100 { animation-delay: 100ms; }
+.animate-delay-200 { animation-delay: 200ms; }
+.animate-delay-300 { animation-delay: 300ms; }
+.animate-delay-400 { animation-delay: 400ms; }
+.animate-delay-500 { animation-delay: 500ms; }

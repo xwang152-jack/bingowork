@@ -1,0 +1,57 @@
+name: Build/Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build and Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.BINGO_TOKEN }}
+        run: |
+          npm run build -- --${{ matrix.platform }} --publish never
+
+      - name: Upload executables to Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: |
+            release/*/Bingowork*.dmg
+            release/*/Bingowork*.exe
+            release/*/Bingowork*.AppImage
+            release/*/Bingowork*.deb
