@@ -70,8 +70,12 @@ export function registerAgentHandlers(): void {
       }
     ) => {
       if (approved && remember && tool) {
-        configStore.addPermission(tool, path);
-        console.log(`[Permission] Saved: ${tool} for path: ${path || '*'}`);
+        // Special handling for playwright_screenshot: store '*' instead of specific timestamped path
+        // This ensures the permission persists across different screenshots
+        const permissionPath = tool === 'playwright__playwright_screenshot' ? '*' : path;
+
+        configStore.addPermission(tool, permissionPath);
+        console.log(`[Permission] Saved: ${tool} for path: ${permissionPath || '*'}`);
       }
       agent?.handleConfirmResponse(id, approved);
     }
