@@ -107,8 +107,7 @@ export class TypedIPC {
     channel: K,
     callback: (payload: EventPayload<K>) => void
   ): void {
-    let wrappedListener: any;
-    wrappedListener = (_event: any, ...args: any[]) => {
+    const wrappedListener: any = (_event: any, ...args: any[]) => {
       if (args.length === 1) {
         callback(args[0] as EventPayload<K>);
       } else {

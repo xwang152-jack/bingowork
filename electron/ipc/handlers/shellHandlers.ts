@@ -30,6 +30,7 @@ export function registerShellHandlers(): void {
 
       if (targetPath.startsWith('file:')) {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { fileURLToPath } = require('url');
           targetPath = fileURLToPath(targetPath);
         } catch (e) {

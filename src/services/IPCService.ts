@@ -205,8 +205,7 @@ export class IPCService {
     channel: string,
     callback: (...args: any[]) => void
   ): void {
-    let wrappedListener: any;
-    wrappedListener = (_event: any, ...args: any[]) => {
+    const wrappedListener: any = (_event: any, ...args: any[]) => {
       callback(...args);
       window.ipcRenderer.off(channel, wrappedListener);
     };
