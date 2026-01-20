@@ -69,8 +69,36 @@ export function registerSessionHandlers(): void {
   });
 
   // Delete session
-  ipcMain.handle(SESSION_CHANNELS.DELETE, (_event, id: string) => {
+  ipcMain.handle(SESSION_CHANNELS.DELETE, (event, id: string) => {
+    const wasCurrent = sessionStore.getCurrentSessionId() === id;
     sessionStore.deleteSession(id);
+
+    if (wasCurrent) {
+      const newCurrentId = sessionStore.getCurrentSessionId();
+      const agent = getAgentInstance();
+      if (agent) {
+        if (newCurrentId) {
+          const session = sessionStore.getSession(newCurrentId);
+          if (session) {
+            agent.loadHistory(session.messages);
+            // Notify frontend
+            setTimeout(() => {
+              if (!event.sender.isDestroyed()) {
+                event.sender.send('agent:history-update', session.messages);
+              }
+            }, 50);
+          }
+        } else {
+          // No sessions left
+          agent.clearHistory();
+          setTimeout(() => {
+            if (!event.sender.isDestroyed()) {
+              event.sender.send('agent:history-update', []);
+            }
+          }, 50);
+        }
+      }
+    }
     return { success: true };
   });
 
