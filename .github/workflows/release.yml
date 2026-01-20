@@ -1,8 +1,10 @@
 name: Build/Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -42,7 +44,7 @@ jobs:
 
       - name: Build and Release
         env:
-          GITHUB_TOKEN: ${{ secrets.BINGO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run build -- --${{ matrix.platform }} --publish never
 
@@ -55,3 +57,5 @@ jobs:
             release/*/Bingowork*.exe
             release/*/Bingowork*.AppImage
             release/*/Bingowork*.deb
+            release/*/latest*.yml
+            release/*/latest*.json
