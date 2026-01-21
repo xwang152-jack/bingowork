@@ -5,6 +5,8 @@ import { SecureCredentials } from '../../config/SecureCredentials';
 import { ModelRegistryService } from '../../models/ModelRegistryService';
 import { getAgentInstance } from './agentHandlers';
 import { TaskDatabase } from '../../config/TaskDatabase';
+import { OpenAIProvider } from '../../agent/providers/OpenAIProvider';
+import { AnthropicProvider } from '../../agent/providers/AnthropicProvider';
 
 function broadcast(channel: string, data?: unknown) {
     const windows = BrowserWindow.getAllWindows();
@@ -105,5 +107,31 @@ export function registerModelHandlers(taskDb: TaskDatabase | null): void {
         broadcast('config:updated');
 
         return { success: true, activeModelId: state.activeModelId };
+    });
+
+    ipcMain.handle(MODEL_CHANNELS.CHECK_CONNECTION, async (_event, payload: { providerId: string; baseUrl?: string; apiKey?: string; protocol?: 'openai' | 'anthropic' }) => {
+        try {
+            let apiKey = payload.apiKey || '';
+            if (!apiKey && payload.providerId) {
+                // If API key is not provided in payload, try to get it from secure storage
+                apiKey = (await SecureCredentials.getApiKey(payload.providerId)) || '';
+            }
+
+            const baseUrl = payload.baseUrl || '';
+            const protocol = payload.protocol || (payload.providerId === 'anthropic' ? 'anthropic' : 'openai');
+
+            let instance;
+            if (protocol === 'anthropic') {
+                instance = new AnthropicProvider(apiKey, baseUrl);
+            } else {
+                instance = new OpenAIProvider(apiKey, baseUrl);
+            }
+
+            const success = await instance.checkConnection();
+            return { success };
+        } catch (error) {
+            console.error('Connection check failed:', error);
+            return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
     });
 }

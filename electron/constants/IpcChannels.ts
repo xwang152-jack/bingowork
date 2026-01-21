@@ -74,6 +74,7 @@ export const MODEL_CHANNELS = {
   UPDATE_PROVIDER: 'models:update-provider',
   ADD_CUSTOM_MODEL: 'models:add-custom-model',
   DELETE_CUSTOM_MODEL: 'models:delete-custom-model',
+  CHECK_CONNECTION: 'models:check-connection',
   UPDATED: 'models:updated', // Event: model registry updated
 } as const;
 

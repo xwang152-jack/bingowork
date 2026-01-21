@@ -43,6 +43,27 @@ export class OpenAIProvider extends BaseLLMProvider {
         return this.client.baseURL;
     }
 
+    async checkConnection(): Promise<boolean> {
+        try {
+            await this.client.chat.completions.create({
+                model: 'gpt-3.5-turbo', // Use a common model name, though the actual model ID might be overridden by the proxy/server
+                messages: [{ role: 'user', content: 'ping' }],
+                max_tokens: 1
+            });
+            return true;
+        } catch (error) {
+            console.error('OpenAI connection check failed:', error);
+            // Fallback: try models.list() if chat fails (some models might not exist but auth is correct)
+            try {
+                await this.client.models.list();
+                return true;
+            } catch (listError) {
+                console.error('OpenAI models list failed:', listError);
+                return false;
+            }
+        }
+    }
+
     protected async convertToOpenAIMessages(history: Anthropic.MessageParam[], systemPrompt: string): Promise<ChatCompletionMessageParam[]> {
         const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: systemPrompt }];
 

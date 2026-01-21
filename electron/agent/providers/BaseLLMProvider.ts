@@ -13,6 +13,7 @@ export type StreamChatParams = {
 export abstract class BaseLLMProvider {
     abstract getProviderName(): string;
     abstract getBaseURL(): string | undefined;
+    abstract checkConnection(): Promise<boolean>;
     abstract streamChat(params: StreamChatParams): Promise<Anthropic.ContentBlock[]>;
 }
 

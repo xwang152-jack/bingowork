@@ -17,6 +17,20 @@ export class AnthropicProvider extends BaseLLMProvider {
         return this.client.baseURL;
     }
 
+    async checkConnection(): Promise<boolean> {
+        try {
+            await this.client.messages.create({
+                model: 'claude-3-haiku-20240307', // Use a lightweight model for check
+                max_tokens: 1,
+                messages: [{ role: 'user', content: 'ping' }]
+            });
+            return true;
+        } catch (error) {
+            console.error('Anthropic connection check failed:', error);
+            return false;
+        }
+    }
+
     async streamChat(params: StreamChatParams): Promise<Anthropic.ContentBlock[]> {
         const { model, systemPrompt, messages, tools, maxTokens, signal, onToken } = params;
         const finalContent: Anthropic.ContentBlock[] = [];

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye } from 'lucide-react';
 import { SkillEditor } from './SkillEditor';
-import { useModelRegistry } from '../hooks/useModelRegistry';
+import { ModelSettings } from './settings/ModelSettings';
 
 // Constants
 const UI_TIMEOUTS = {
@@ -13,11 +13,14 @@ interface SettingsViewProps {
 }
 
 interface Config {
+    // Legacy model config fields (kept for type compatibility but managed via ModelSettings)
     provider: 'anthropic' | 'openai' | 'minimax';
     apiKey: string;
     apiKeys?: Record<string, string>;
     apiUrl: string;
     model: string;
+    
+    // Active config fields
     authorizedFolders: string[];
     networkAccess: boolean;
     browserAccess: boolean;
@@ -47,8 +50,8 @@ export function SettingsView({ onClose }: SettingsViewProps) {
         provider: 'anthropic',
         apiKey: '',
         apiKeys: { anthropic: '', openai: '', minimax: '' },
-        apiUrl: 'https://open.bigmodel.cn/api/anthropic',
-        model: 'glm-4.7',
+        apiUrl: '',
+        model: '',
         authorizedFolders: [],
         networkAccess: true,
         browserAccess: false,
@@ -71,19 +74,6 @@ export function SettingsView({ onClose }: SettingsViewProps) {
     // Permissions State
     const [permissions, setPermissions] = useState<ToolPermission[]>([]);
 
-    const { state: modelState, updateProvider, addCustomModel, deleteCustomModel, setActiveModel, error: modelError } = useModelRegistry();
-    const [providerDraft, setProviderDraft] = useState<Record<string, { baseUrl: string; apiKeyDraft: string }>>({});
-    const [selectedProviderId, setSelectedProviderId] = useState<string>('');
-    const [newModelDraft, setNewModelDraft] = useState<{ providerSelect: string; customProviderName: string; modelId: string; displayName: string; baseUrl: string; apiKey: string; protocol: 'openai' | 'anthropic' }>({
-        providerSelect: '',
-        customProviderName: '',
-        modelId: '',
-        displayName: '',
-        baseUrl: '',
-        apiKey: '',
-        protocol: 'openai',
-    });
-
     const loadPermissions = () => {
         window.ipcRenderer.invoke('permissions:list').then(list => setPermissions(list as ToolPermission[]));
     };
@@ -104,44 +94,12 @@ export function SettingsView({ onClose }: SettingsViewProps) {
         window.ipcRenderer.invoke('config:get-all').then(async (cfg) => {
             if (cfg) {
                 const config = cfg as Config;
-                // Load the API key for the current provider from secure storage
-                const apiKey = await window.ipcRenderer.invoke('config:get-api-key', config.provider) as string;
                 setConfig({
                     ...config,
-                    apiKey,
-                    apiKeys: {
-                        ...config.apiKeys,
-                        [config.provider]: apiKey
-                    }
                 });
             }
         });
     }, []);
-
-    useEffect(() => {
-        if (!modelState) return;
-        setProviderDraft((prev) => {
-            const next: Record<string, { baseUrl: string; apiKeyDraft: string }> = { ...prev };
-            for (const p of modelState.providers) {
-                if (!next[p.providerId]) {
-                    next[p.providerId] = { baseUrl: p.baseUrl, apiKeyDraft: '' };
-                } else {
-                    next[p.providerId] = { ...next[p.providerId], baseUrl: p.baseUrl };
-                }
-            }
-            return next;
-        });
-        if (!selectedProviderId) {
-            const first = modelState.providers[0]?.providerId;
-            if (first) setSelectedProviderId(first);
-        }
-        if (!newModelDraft.providerSelect) {
-            const first = modelState.providers[0]?.providerId;
-            if (first) {
-                setNewModelDraft(prev => ({ ...prev, providerSelect: first }));
-            }
-        }
-    }, [modelState]);
 
     useEffect(() => {
         if (activeTab === 'mcp') {
@@ -189,21 +147,6 @@ export function SettingsView({ onClose }: SettingsViewProps) {
 
     const handleSave = async () => {
         await window.ipcRenderer.invoke('config:set-all', config);
-
-        if (modelState) {
-            for (const p of modelState.providers) {
-                const draft = providerDraft[p.providerId];
-                if (!draft) continue;
-                const payload: { providerId: string; baseUrl?: string; apiKey?: string } = {
-                    providerId: p.providerId,
-                    baseUrl: draft.baseUrl,
-                };
-                if (draft.apiKeyDraft && draft.apiKeyDraft.trim()) {
-                    payload.apiKey = draft.apiKeyDraft;
-                }
-                await updateProvider(payload);
-            }
-        }
         setSaved(true);
         setTimeout(() => {
             setSaved(false);
@@ -248,7 +191,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                 <div className="flex items-center justify-between p-5 border-b border-stone-200/60 shrink-0">
                     <h2 className="text-lg font-semibold text-stone-800 tracking-tight">设置</h2>
                     <div className="flex items-center gap-2">
-                        {activeTab === 'api' || activeTab === 'folders' || activeTab === 'advanced' ? (
+                        {activeTab === 'folders' || activeTab === 'advanced' ? (
                             <button
                                 type="button"
                                 onClick={handleSave}
@@ -309,312 +252,8 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                                 role="tabpanel"
                                 id="settings-panel-api"
                                 aria-labelledby="settings-tab-api"
-                                className="space-y-5"
                             >
-                                {modelError ? (
-                                    <div className="bg-red-50 text-red-700 rounded-lg p-3 text-xs">
-                                        {modelError}
-                                    </div>
-                                ) : null}
-
-                                <div className="bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-2xl p-5 shadow-sm">
-                                    <div className="text-sm font-semibold text-stone-800 mb-4 tracking-tight">供应商配置</div>
-                                    {modelState?.providers?.length ? (
-                                        (() => {
-                                            const provider = modelState.providers.find(p => p.providerId === selectedProviderId) || modelState.providers[0];
-                                            if (!provider) return null;
-                                            const draft = providerDraft[provider.providerId] || { baseUrl: provider.baseUrl, apiKeyDraft: '' };
-                                            const placeholder = provider.hasApiKey ? '已配置（留空表示不修改）' : '请输入 API Key';
-                                            const modelsOfProvider = (modelState.models || []).filter(m => m.providerId === provider.providerId);
-                                            const activeModel = (modelState.models || []).find(m => m.id === modelState.activeModelId);
-                                            const activeModelIdForProvider = activeModel?.providerId === provider.providerId ? activeModel?.id : (modelsOfProvider[0]?.id || '');
-
-                                            return (
-                                                <div className="space-y-3">
-                                                    <div className="grid grid-cols-1 gap-2">
-                                                        <div className="flex items-center justify-between gap-3">
-                                                            <label className="text-xs font-medium text-stone-500">供应商名称</label>
-                                                            <span className="text-xs text-stone-400">{provider.protocol === 'anthropic' ? 'Anthropic 兼容' : 'OpenAI 兼容'}</span>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                            <select
-                                                                value={provider.providerId}
-                                                                onChange={(e) => setSelectedProviderId(e.target.value)}
-                                                                className="w-full bg-white border border-stone-200/60 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E85D3E]/20 focus:border-[#E85D3E] transition-all"
-                                                            >
-                                                                {modelState.providers.map(p => (
-                                                                    <option key={p.providerId} value={p.providerId}>{p.providerName}</option>
-                                                                ))}
-                                                            </select>
-                                                            <input
-                                                                type="text"
-                                                                value={provider.providerId}
-                                                                readOnly
-                                                                className="w-full bg-stone-50 border border-stone-200/60 rounded-xl px-3 py-2.5 text-sm font-mono text-stone-500"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 gap-2">
-                                                        <label className="text-xs font-medium text-stone-500">Model ID</label>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                            <select
-                                                                value={activeModelIdForProvider}
-                                                                onChange={(e) => { void setActiveModel(e.target.value); }}
-                                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                                            >
-                                                                {modelsOfProvider.map(m => (
-                                                                    <option key={m.id} value={m.id}>
-                                                                        {m.modelId}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                            <input
-                                                                type="text"
-                                                                value={(activeModel?.providerId === provider.providerId ? activeModel?.modelId : modelsOfProvider[0]?.modelId) || ''}
-                                                                readOnly
-                                                                className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono text-stone-500"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 gap-2">
-                                                        <label className="text-xs font-medium text-stone-500">Base URL</label>
-                                                        <input
-                                                            type="text"
-                                                            value={draft.baseUrl}
-                                                            onChange={(e) => setProviderDraft(prev => ({ ...prev, [provider.providerId]: { ...draft, baseUrl: e.target.value } }))}
-                                                            placeholder={provider.defaultBaseUrl || 'https://...'}
-                                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                                        />
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 gap-2">
-                                                        <div className="flex items-center justify-between">
-                                                            <label className="text-xs font-medium text-stone-500">API Key</label>
-                                                            <span className={`text-xs ${provider.hasApiKey ? 'text-green-600' : 'text-stone-400'}`}>{provider.hasApiKey ? '已配置' : '未配置'}</span>
-                                                        </div>
-                                                        <input
-                                                            type="password"
-                                                            value={draft.apiKeyDraft}
-                                                            onChange={(e) => setProviderDraft(prev => ({ ...prev, [provider.providerId]: { ...draft, apiKeyDraft: e.target.value } }))}
-                                                            placeholder={placeholder}
-                                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                                        />
-                                                    </div>
-
-                                                    <div className="bg-stone-50/60 rounded-lg border border-stone-200 p-3">
-                                                        <div className="text-xs font-medium text-stone-600 mb-2">该供应商下的模型</div>
-                                                        {modelsOfProvider.length ? (
-                                                            <div className="space-y-2">
-                                                                {modelsOfProvider.map((m) => (
-                                                                    <div key={m.id} className="flex items-start justify-between gap-3">
-                                                                        <div className="min-w-0">
-                                                                            <div className="text-sm text-stone-700 truncate">
-                                                                                {m.displayName}{m.isConfigured ? '' : '（待配置）'}
-                                                                            </div>
-                                                                            <div className="text-xs text-stone-400 font-mono truncate">model: {m.modelId}</div>
-                                                                            <div className="text-xs text-stone-400 font-mono truncate">baseUrl: {m.effectiveBaseUrl || '-'}</div>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2 shrink-0">
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => { void setActiveModel(m.id); }}
-                                                                                className={`px-2 py-1 rounded-lg text-xs border transition-colors ${modelState.activeModelId === m.id ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'}`}
-                                                                            >
-                                                                                {modelState.activeModelId === m.id ? '当前' : '设为当前'}
-                                                                            </button>
-                                                                            {m.isCustom ? (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={async () => {
-                                                                                        if (confirm(`确定要删除自定义模型 "${m.displayName}" 吗？`)) {
-                                                                                            await deleteCustomModel(m.id);
-                                                                                        }
-                                                                                    }}
-                                                                                    className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                                                                                    aria-label="删除模型"
-                                                                                >
-                                                                                    <Trash2 size={16} />
-                                                                                </button>
-                                                                            ) : null}
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-xs text-stone-400">暂无模型</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })()
-                                    ) : (
-                                        <div className="text-xs text-stone-400">正在加载供应商列表...</div>
-                                    )}
-                                </div>
-
-                                <div className="bg-white border border-stone-200 rounded-xl p-4 space-y-3">
-                                    <div className="text-sm font-medium text-stone-800">增加模型</div>
-                                    <div className="grid grid-cols-1 gap-2">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                            <select
-                                                value={newModelDraft.providerSelect || ''}
-                                                onChange={(e) => {
-                                                    const nextProviderSelect = e.target.value;
-                                                    if (nextProviderSelect !== '__custom__') {
-                                                        const nextBaseUrl = providerDraft[nextProviderSelect]?.baseUrl || '';
-                                                        setNewModelDraft(prev => ({ ...prev, providerSelect: nextProviderSelect, baseUrl: nextBaseUrl, apiKey: '' }));
-                                                        return;
-                                                    }
-                                                    setNewModelDraft(prev => ({ ...prev, providerSelect: nextProviderSelect, baseUrl: '', apiKey: '' }));
-                                                }}
-                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                            >
-                                                {(modelState?.providers || []).map(p => (
-                                                    <option key={p.providerId} value={p.providerId}>{p.providerName}</option>
-                                                ))}
-                                                <option value="__custom__">自定义供应商...</option>
-                                            </select>
-                                            <input
-                                                type="text"
-                                                value={newModelDraft.providerSelect === '__custom__'
-                                                    ? newModelDraft.customProviderName
-                                                    : String(modelState?.providers?.find(p => p.providerId === newModelDraft.providerSelect)?.providerName || '')
-                                                }
-                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, customProviderName: e.target.value }))}
-                                                placeholder="供应商名称（选择“自定义供应商...”时填写）"
-                                                className={`w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 ${newModelDraft.providerSelect === '__custom__' ? 'bg-white' : 'bg-stone-50 text-stone-500'}`}
-                                                readOnly={newModelDraft.providerSelect !== '__custom__'}
-                                            />
-                                        </div>
-                                        <input
-                                            type="text"
-                                            value={newModelDraft.modelId}
-                                            onChange={(e) => setNewModelDraft(prev => ({ ...prev, modelId: e.target.value }))}
-                                            placeholder="Model ID（例如：deepseek-chat）"
-                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={newModelDraft.displayName}
-                                            onChange={(e) => setNewModelDraft(prev => ({ ...prev, displayName: e.target.value }))}
-                                            placeholder="显示名称（可选）"
-                                            className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                        />
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                            <input
-                                                type="text"
-                                                value={newModelDraft.baseUrl}
-                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, baseUrl: e.target.value }))}
-                                                placeholder={newModelDraft.providerSelect === '__custom__' ? 'Base URL（必填）' : 'Base URL（留空则使用该供应商已保存的 Base URL）'}
-                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                            />
-                                            <input
-                                                type="password"
-                                                value={newModelDraft.apiKey}
-                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, apiKey: e.target.value }))}
-                                                placeholder={newModelDraft.providerSelect === '__custom__' ? 'API Key（必填）' : 'API Key（留空表示不修改该供应商已配置的 Key）'}
-                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                            <select
-                                                value={newModelDraft.protocol}
-                                                onChange={(e) => setNewModelDraft(prev => ({ ...prev, protocol: e.target.value as 'openai' | 'anthropic' }))}
-                                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                                            >
-                                                <option value="openai">OpenAI 兼容</option>
-                                                <option value="anthropic">Anthropic 兼容</option>
-                                            </select>
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    const providerName = newModelDraft.providerSelect === '__custom__'
-                                                        ? String(newModelDraft.customProviderName || '').trim()
-                                                        : String(modelState?.providers?.find(p => p.providerId === newModelDraft.providerSelect)?.providerName || '').trim();
-                                                    const normalizedProviderName = String(providerName || '').trim();
-                                                    if (!normalizedProviderName) {
-                                                        alert('请选择或填写供应商名称');
-                                                        return;
-                                                    }
-                                                    if (newModelDraft.providerSelect === '__custom__') {
-                                                        if (!String(newModelDraft.baseUrl || '').trim()) {
-                                                            alert('请填写 Base URL');
-                                                            return;
-                                                        }
-                                                        if (!String(newModelDraft.apiKey || '').trim()) {
-                                                            alert('请填写 API Key');
-                                                            return;
-                                                        }
-                                                    }
-                                                    if (!String(newModelDraft.modelId || '').trim()) {
-                                                        alert('请填写 Model ID');
-                                                        return;
-                                                    }
-
-                                                    await addCustomModel({
-                                                        providerName: normalizedProviderName,
-                                                        modelId: newModelDraft.modelId,
-                                                        displayName: newModelDraft.displayName || undefined,
-                                                        baseUrl: String(newModelDraft.baseUrl || '').trim() ? newModelDraft.baseUrl : undefined,
-                                                        apiKey: String(newModelDraft.apiKey || '').trim() ? newModelDraft.apiKey : undefined,
-                                                        protocol: newModelDraft.protocol,
-                                                    });
-                                                    setNewModelDraft({ providerSelect: modelState?.providers?.[0]?.providerId ?? '', customProviderName: '', modelId: '', displayName: '', baseUrl: '', apiKey: '', protocol: 'openai' });
-                                                }}
-                                                className="w-full py-2 border border-dashed border-stone-300 text-stone-600 hover:text-orange-600 hover:border-orange-500 hover:bg-orange-50 rounded-lg transition-all flex items-center justify-center gap-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                                            >
-                                                <Plus size={16} />
-                                                增加模型
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white border border-stone-200 rounded-xl p-4">
-                                    <div className="text-sm font-medium text-stone-800 mb-3">模型列表</div>
-                                    {modelState?.models?.length ? (
-                                        <div className="space-y-2">
-                                            {modelState.models.map((m) => (
-                                                <div key={m.id} className="flex items-center justify-between p-3 bg-stone-50/60 rounded-lg border border-stone-200">
-                                                    <div className="min-w-0">
-                                                        <div className="text-sm font-medium text-stone-700 truncate">
-                                                            {m.providerName} / {m.displayName}{m.isConfigured ? '' : '（待配置）'}
-                                                        </div>
-                                                        <div className="text-xs text-stone-400 font-mono truncate">{m.modelId}</div>
-                                                        <div className="text-xs text-stone-400 font-mono truncate">{m.effectiveBaseUrl || '-'}</div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => { void setActiveModel(m.id); }}
-                                                            className={`px-2 py-1 rounded-lg text-xs border transition-colors ${modelState.activeModelId === m.id ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'}`}
-                                                        >
-                                                            {modelState.activeModelId === m.id ? '当前' : '设为当前'}
-                                                        </button>
-                                                        {m.isCustom ? (
-                                                            <button
-                                                                type="button"
-                                                                onClick={async () => {
-                                                                    if (confirm(`确定要删除自定义模型 "${m.displayName}" 吗？`)) {
-                                                                        await deleteCustomModel(m.id);
-                                                                    }
-                                                                }}
-                                                                className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                                                                aria-label="删除模型"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        ) : null}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="text-xs text-stone-400">暂无模型</div>
-                                    )}
-                                </div>
+                                <ModelSettings />
                             </div>
                         )}
 
