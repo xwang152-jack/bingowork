@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Info, Settings, MessageSquare, Trash2, Edit2, MoreHorizontal } from 'lucide-react';
+import { Plus, Info, Settings, MessageSquare, Trash2, Edit2, MoreHorizontal, PanelLeftClose } from 'lucide-react';
 import type { Session } from '../../../electron/types/ipc';
 
 type Tab = 'chat' | 'code' | 'cowork';
@@ -15,6 +15,8 @@ interface LeftSidebarProps {
   onDeleteSession?: (id: string) => void;
   onRenameSession?: (id: string, title: string) => void;
   footerHeight?: number | null;
+  isOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export function LeftSidebar({ 
@@ -27,7 +29,9 @@ export function LeftSidebar({
   onNewSession,
   onDeleteSession,
   onRenameSession,
-  footerHeight
+  footerHeight,
+  isOpen = true,
+  onToggleSidebar
 }: LeftSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -73,10 +77,13 @@ export function LeftSidebar({
   };
 
   return (
-    <div className="w-[280px] bg-[#FAF8F5] flex flex-col border-r border-stone-200/60 h-full animate-slide-in">
+    <div className={`${
+      isOpen ? 'w-[280px] opacity-100' : 'w-0 opacity-0'
+    } bg-[#FAF8F5] flex flex-col border-r border-stone-200/60 h-full transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap`}>
+      <div className="w-[280px] h-full flex flex-col">
       {/* Tabs */}
-      <div className="sidebar-section">
-        <div className="tab-switcher">
+      <div className="sidebar-section flex items-center justify-between pr-4">
+        <div className="tab-switcher flex-1">
           {(['chat', 'code', 'cowork'] as Tab[]).map((tab) => (
             <button
               key={tab}
@@ -91,6 +98,13 @@ export function LeftSidebar({
             </button>
           ))}
         </div>
+        <button
+          onClick={onToggleSidebar}
+          className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-200/50 rounded-lg transition-colors ml-2"
+          title="收起侧边栏"
+        >
+          <PanelLeftClose size={16} />
+        </button>
       </div>
 
       {/* New Task Button */}
@@ -214,6 +228,7 @@ export function LeftSidebar({
             <span>Settings</span>
           </button>
         )}
+      </div>
       </div>
     </div>
   );

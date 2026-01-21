@@ -3,8 +3,7 @@
  * Main workspace view composed of smaller, focused components
  */
 
-import { useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
 import { SessionSidebar } from './SessionSidebar';
 import { TopBar } from './TopBar';
 import { MessageList } from './MessageList';
@@ -16,11 +15,33 @@ export interface CoworkViewRefactoredProps {
     onOpenSettings: () => void;
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'bingowork-sidebar-collapsed';
+
 /**
  * Main cowork view component with session management and chat functionality
  */
 export function CoworkViewRefactored({ onOpenSettings }: CoworkViewRefactoredProps) {
-    const [showSidebar, setShowSidebar] = useState(true);
+    // Load collapsed state from localStorage
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        try {
+            return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    });
+
+    // Save collapsed state to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+        } catch (error) {
+            console.warn('Failed to save sidebar state:', error);
+        }
+    }, [sidebarCollapsed]);
+
+    const toggleSidebar = useCallback(() => {
+        setSidebarCollapsed(prev => !prev);
+    }, []);
 
     // Use custom hooks for state management
     const {
@@ -81,37 +102,44 @@ export function CoworkViewRefactored({ onOpenSettings }: CoworkViewRefactoredPro
                 title={currentSessionTitle}
                 onNewSession={handleNewSession}
                 onOpenSettings={onOpenSettings}
+                sidebarCollapsed={sidebarCollapsed}
+                onToggleSidebar={toggleSidebar}
             />
 
             {/* Main Content */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Sidebar */}
-                {showSidebar && (
-                    <SessionSidebar
-                        sessions={sessions}
-                        currentSessionId={currentSessionId}
-                        loading={sessionsLoading}
-                        onLoadSession={handleLoadSession}
-                        onNewSession={handleNewSession}
-                        onDeleteSession={handleDeleteSession}
-                        onRenameSession={handleRenameSession}
-                    />
+                {!sidebarCollapsed && (
+                    <div className="w-[280px] flex-shrink-0 transition-all duration-300 ease-in-out">
+                        <SessionSidebar
+                            sessions={sessions}
+                            currentSessionId={currentSessionId}
+                            loading={sessionsLoading}
+                            onLoadSession={handleLoadSession}
+                            onNewSession={handleNewSession}
+                            onDeleteSession={handleDeleteSession}
+                            onRenameSession={handleRenameSession}
+                        />
+                    </div>
                 )}
 
-                {/* Toggle Sidebar Button */}
-                <button
-                    onClick={() => setShowSidebar(!showSidebar)}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-1 bg-white border border-stone-200 rounded-r-lg shadow-sm hover:bg-stone-50 transition-colors"
-                    style={{ left: showSidebar ? '16rem' : '0' }}
-                >
-                    <X
-                        size={16}
-                        className={`transition-transform ${showSidebar ? '' : 'rotate-180'}`}
-                    />
-                </button>
+                {/* Collapsed sidebar hint */}
+                {sidebarCollapsed && (
+                    <button
+                        onClick={toggleSidebar}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-white border border-stone-200 rounded-r-lg shadow-lg hover:bg-stone-50 hover:border-stone-300 transition-all group"
+                        title="展开侧边栏"
+                    >
+                        <div className="flex flex-col items-center gap-1">
+                            <div className="w-1 h-4 bg-stone-300 rounded-full group-hover:bg-[#E85D3E] transition-colors"></div>
+                            <div className="w-1 h-4 bg-stone-300 rounded-full group-hover:bg-[#E85D3E] transition-colors"></div>
+                            <div className="w-1 h-4 bg-stone-300 rounded-full group-hover:bg-[#E85D3E] transition-colors"></div>
+                        </div>
+                    </button>
+                )}
 
                 {/* Chat Area */}
-                <div className="flex-1 flex flex-col ml-auto">
+                <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out">
                     {/* Messages */}
                     <MessageList messages={history} isDark={false} streamingText={streamingText} />
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PanelLeftOpen } from 'lucide-react';
 import { LeftSidebar } from './layout/LeftSidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { MessageList } from './cowork/MessageList';
@@ -10,6 +11,8 @@ import { useModelRegistry } from '../hooks/useModelRegistry';
 export interface MainInterfaceProps {
     onOpenSettings: () => void;
 }
+
+const SIDEBAR_OPEN_KEY = 'bingowork-sidebar-open';
 
 export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
     const {
@@ -32,6 +35,24 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
     const activeTab = (config?.workMode || 'cowork') as 'chat' | 'code' | 'cowork';
 
     const { state: modelState, setActiveModel: setActiveModelId } = useModelRegistry();
+
+    // Sidebar state
+    const [sidebarOpen, setSidebarOpen] = useState(() => {
+        try {
+            const saved = localStorage.getItem(SIDEBAR_OPEN_KEY);
+            return saved !== null ? saved === 'true' : true;
+        } catch {
+            return true;
+        }
+    });
+
+    const toggleSidebar = useCallback(() => {
+        setSidebarOpen(prev => {
+            const next = !prev;
+            localStorage.setItem(SIDEBAR_OPEN_KEY, String(next));
+            return next;
+        });
+    }, []);
 
     const chatInputWrapRef = useRef<HTMLDivElement>(null);
     const [chatInputHeight, setChatInputHeight] = useState<number | null>(null);
@@ -68,9 +89,24 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
                 onDeleteSession={deleteSession}
                 onRenameSession={renameSession}
                 footerHeight={chatInputHeight}
+                isOpen={sidebarOpen}
+                onToggleSidebar={toggleSidebar}
             />
 
             <div className="flex-1 flex flex-col h-full relative min-w-0 bg-white">
+                {/* Expand Button */}
+                {!sidebarOpen && (
+                    <div className="absolute left-4 top-3 z-10 animate-fade-in">
+                        <button
+                            onClick={toggleSidebar}
+                            className="p-2 bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-xl shadow-sm hover:shadow-md hover:bg-white text-stone-500 hover:text-stone-800 transition-all"
+                            title="展开侧边栏"
+                        >
+                            <PanelLeftOpen size={20} />
+                        </button>
+                    </div>
+                )}
+
                 {/* Chat Area */}
                 <MessageList
                     messages={history}
