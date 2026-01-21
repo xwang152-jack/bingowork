@@ -103,7 +103,6 @@ export function ModelSettings() {
             {/* Add Provider Modal */}
             {showAddProvider && (
                 <AddProviderModal
-                    existingProviders={state.providers}
                     onClose={() => setShowAddProvider(false)}
                     onAdd={async (template, name) => {
                         // For simplicity, we just add a custom model which implicitly creates/activates the provider config
@@ -390,7 +389,7 @@ function AddModelInline({ provider, onAdd }: { provider: ProviderConfigDTO, onAd
     );
 }
 
-function AddProviderModal({ onClose, onAdd, existingProviders }: { onClose: () => void, onAdd: (t: typeof PROVIDER_TEMPLATES[0], name: string) => void, existingProviders: ProviderConfigDTO[] }) {
+function AddProviderModal({ onClose, onAdd }: { onClose: () => void, onAdd: (t: typeof PROVIDER_TEMPLATES[0], name: string) => void }) {
     const [selectedTemplate, setSelectedTemplate] = useState(PROVIDER_TEMPLATES[0]);
     const [customName, setCustomName] = useState('');
 
