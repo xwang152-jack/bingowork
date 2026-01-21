@@ -5,6 +5,7 @@
  * Manages the THINKING -> PLANNING -> EXECUTING -> FEEDBACK cycle.
  */
 
+import Anthropic from '@anthropic-ai/sdk';
 import type { BrowserWindow } from 'electron';
 import type { BaseLLMProvider } from './providers/BaseLLMProvider';
 import type { ConversationManager } from './ConversationManager';
@@ -122,7 +123,7 @@ export class AgentOrchestrator {
       const tools = await this.toolRegistry.getTools();
       const systemPrompt = this.promptService.buildSystemPrompt(
         // We need to pass skillManager - for now use empty object
-        { getTools: () => [], loadedSkills: new Set() } as any,
+        { getTools: () => [], loadedSkills: new Set() } as unknown as any,
         config.workMode
       );
 
@@ -144,23 +145,26 @@ export class AgentOrchestrator {
       }
 
       if (finalContent.length > 0) {
-        const assistantMsg: any = { role: 'assistant', content: finalContent };
-        this.conversationManager.addMessage(assistantMsg);
+        const assistantMsg = { role: 'assistant', content: finalContent };
+        this.conversationManager.addMessage(assistantMsg as any);
         this.notifyHistoryUpdate();
 
         // Check for tool uses
-        const toolUses = finalContent.filter((c: any) => c.type === 'tool_use');
+        const toolUses = finalContent.filter((c: Anthropic.ContentBlock) => c.type === 'tool_use');
 
         if (toolUses.length > 0) {
           this.setStage('PLANNING', { toolCount: toolUses.length });
 
           // Execute tools
           const results = await this.toolExecutor.executeTools(
-            toolUses.map((t: any) => ({
-              id: t.id,
-              name: t.name,
-              input: t.input as Record<string, unknown>,
-            })),
+            toolUses.map((t) => {
+              if (t.type !== 'tool_use') return { id: '', name: '', input: {} };
+              return {
+                id: t.id,
+                name: t.name,
+                input: t.input as Record<string, unknown>,
+              };
+            }),
             {
               requestConfirmation: async () => true, // Placeholder
               onToolStream: (chunk, type) => {
@@ -217,12 +221,12 @@ export class AgentOrchestrator {
   /**
    * Format user content for API
    */
-  private formatUserContent(input: string | { content: string; images?: string[] }): string | any[] {
+  private formatUserContent(input: string | { content: string; images?: string[] }): string | Array<Anthropic.ContentBlockParam> {
     if (typeof input === 'string') {
       return input;
     }
 
-    const blocks: any[] = [];
+    const blocks: Array<Anthropic.ContentBlockParam> = [];
 
     // Process images
     if (input.images && input.images.length > 0) {
@@ -239,7 +243,7 @@ export class AgentOrchestrator {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: mediaType,
+                media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
                 data,
               },
             });
@@ -250,12 +254,12 @@ export class AgentOrchestrator {
 
     // Add text
     if (input.content && input.content.trim()) {
-      blocks.push({ type: 'text', text: input.content });
+      blocks.push({ type: 'text', text: input.content } as Anthropic.TextBlockParam);
     } else if (blocks.length > 0) {
-      blocks.push({ type: 'text', text: 'Please analyze this image.' });
+      blocks.push({ type: 'text', text: 'Please analyze this image.' } as Anthropic.TextBlockParam);
     }
 
-    return blocks.length > 0 ? blocks : input.content;
+    return blocks.length > 0 ? (blocks as any) : input.content;
   }
 
   /**

@@ -14,7 +14,7 @@ import { BaseLLMProvider } from './providers/BaseLLMProvider';
 import { AnthropicProvider } from './providers/AnthropicProvider';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { MiniMaxProvider } from './providers/MiniMaxProvider';
-import { generateResponse } from './providers/generateResponse';
+import { generateResponse, ProviderId } from './providers/generateResponse';
 import { logs } from '../utils/logger';
 
 export type AgentMessage = {
@@ -28,6 +28,10 @@ export type AgentStage = 'IDLE' | 'THINKING' | 'PLANNING' | 'EXECUTING' | 'FEEDB
 export type AgentEventSink = {
     logEvent: (type: string, payload: unknown) => void;
 };
+
+interface AgentError extends Error {
+    status?: number;
+}
 
 export class AgentRuntime {
     private llmProvider: BaseLLMProvider;
@@ -457,24 +461,24 @@ export class AgentRuntime {
 
             try {
                 if (!String(this.apiKey || '').trim()) {
-                    const e = new Error('API Key 未配置，请在设置中为当前供应商填写 API Key');
-                    (e as any).status = 401;
+                    const e: AgentError = new Error('API Key 未配置，请在设置中为当前供应商填写 API Key');
+                    e.status = 401;
                     throw e;
                 }
                 if (!String(this.model || '').trim()) {
-                    const e = new Error('模型未配置，请在设置中选择或填写模型');
-                    (e as any).status = 400;
+                    const e: AgentError = new Error('模型未配置，请在设置中选择或填写模型');
+                    e.status = 400;
                     throw e;
                 }
                 if (!String(this.apiUrl || '').trim()) {
-                    const e = new Error('Base URL 未配置，请在设置中填写 Base URL');
-                    (e as any).status = 400;
+                    const e: AgentError = new Error('Base URL 未配置，请在设置中填写 Base URL');
+                    e.status = 400;
                     throw e;
                 }
 
                 this.setStage('THINKING', { iteration: iterationCount });
                 const finalContent = await generateResponse(
-                    this.provider as any,
+                    this.provider as ProviderId,
                     {
                         model: this.model,
                         systemPrompt,
