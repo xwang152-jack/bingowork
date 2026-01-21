@@ -27,7 +27,7 @@ export class AnthropicProvider extends BaseLLMProvider {
             return true;
         } catch (error) {
             console.error('Anthropic connection check failed:', error);
-            return false;
+            throw error;
         }
     }
 

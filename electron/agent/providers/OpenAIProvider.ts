@@ -59,7 +59,8 @@ export class OpenAIProvider extends BaseLLMProvider {
                 return true;
             } catch (listError) {
                 console.error('OpenAI models list failed:', listError);
-                return false;
+                // Throw the error so it can be captured by the IPC handler and sent to the frontend
+                throw listError;
             }
         }
     }

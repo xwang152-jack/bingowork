@@ -178,6 +178,7 @@ function ProviderCard({
     const [baseUrl, setBaseUrl] = useState(provider.baseUrl || provider.defaultBaseUrl);
     const [checking, setChecking] = useState(false);
     const [checkResult, setCheckResult] = useState<'success' | 'error' | null>(null);
+    const [checkError, setCheckError] = useState<string>('');
     const [isDirty, setIsDirty] = useState(false);
 
     // Sync state when provider updates
@@ -200,6 +201,7 @@ function ProviderCard({
     const handleCheck = async () => {
         setChecking(true);
         setCheckResult(null);
+        setCheckError('');
         try {
             // We need to save first if dirty, or pass current values to check
             const res = await window.ipcRenderer.invoke('models:check-connection', {
@@ -213,10 +215,12 @@ function ProviderCard({
                 setCheckResult('success');
             } else {
                 setCheckResult('error');
+                setCheckError(res.error || '未知错误');
                 console.error(res.error);
             }
         } catch (e) {
             setCheckResult('error');
+            setCheckError(e instanceof Error ? e.message : String(e));
         } finally {
             setChecking(false);
         }
@@ -307,7 +311,12 @@ function ProviderCard({
                                     测试连接
                                 </button>
                                 {checkResult === 'success' && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check size={12}/> 连接成功</span>}
-                                {checkResult === 'error' && <span className="text-xs text-red-500">连接失败，请检查配置</span>}
+                                {checkResult === 'error' && (
+                                    <div className="flex flex-col">
+                                        <span className="text-xs text-red-500 font-medium">连接失败</span>
+                                        {checkError && <span className="text-[10px] text-red-400 max-w-[200px] truncate" title={checkError}>{checkError}</span>}
+                                    </div>
+                                )}
                              </div>
                         </div>
                     </div>

@@ -75,6 +75,7 @@ class ConfigStore {
     private configPath: string;
     private migrationFlagPath: string;
     private secureCredentialsReady: boolean = false;
+    private migrationPromise: Promise<void> | null = null;
 
     constructor() {
         let userDataPath: string;
@@ -101,19 +102,29 @@ class ConfigStore {
                 const loadedData = JSON.parse(content);
                 this.data = { ...defaults, ...loadedData };
 
-                // Migrate API keys to secure storage on first load
-                this.migrateApiKeysIfNeeded().catch(err => {
+                // Start migration (will be awaited by initialize())
+                this.migrationPromise = this.migrateApiKeysIfNeeded().catch(err => {
                     console.error('[ConfigStore] Failed to migrate API keys:', err);
                 });
             } catch (e) {
                 this.data = { ...defaults };
+                this.migrationPromise = Promise.resolve();
             }
         } else {
             this.data = { ...defaults };
             this.save();
+            this.migrationPromise = Promise.resolve();
         }
+    }
 
-        // Mark secure credentials as ready
+    /**
+     * Initialize the store - must be called before accessing secure credentials
+     * This ensures API key migration completes before use
+     */
+    async initialize(): Promise<void> {
+        if (this.migrationPromise) {
+            await this.migrationPromise;
+        }
         this.secureCredentialsReady = true;
     }
 

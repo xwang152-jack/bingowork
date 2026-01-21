@@ -124,6 +124,10 @@ app.whenReady().then(async () => {
     // This allows the window to display immediately while agent loads
     setImmediate(async () => {
       try {
+        // Wait for ConfigStore initialization (API key migration)
+        await configStore.initialize();
+        console.log('[ConfigStore] Initialized with secure credentials ready');
+
         const agentInitializer = getAgentInitializer();
         const agent = await agentInitializer.initializeAgent(mainWindow, taskDb);
 
