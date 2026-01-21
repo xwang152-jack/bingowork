@@ -82,7 +82,7 @@ export class CoreTools {
             // Simple string matching to mark as done
             newContent = newContent.replace(`- [ ] ${args.content}`, `- [x] ${args.content}`);
         } else {
-            // For update or complex logic, we might need a better parser. 
+            // For update or complex logic, we might need a better parser.
             // For now, suggest overwrite for complex edits.
             return "For complex updates, please use action='overwrite' with the full new content.";
         }
@@ -91,6 +91,44 @@ export class CoreTools {
         await fs.mkdir(path.dirname(todoPath), { recursive: true });
         await fs.writeFile(todoPath, newContent, 'utf-8');
 
+        // Broadcast todo update to all windows
+        try {
+            const { BrowserWindow } = await import('electron');
+            const { TODO_CHANNELS } = await import('../../constants/IpcChannels');
+            const todoList = {
+                items: this.parseTodoContent(newContent),
+                sourcePath: todoPath,
+                exists: true,
+                lastModified: Date.now()
+            };
+
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed()) {
+                    win.webContents.send(TODO_CHANNELS.UPDATED, todoList);
+                }
+            });
+        } catch (error) {
+            console.error('[CoreTools] Failed to broadcast todo update:', error);
+        }
+
         return `Todo updated successfully at ${todoPath}`;
+    }
+
+    private parseTodoContent(content: string): Array<{ text: string; completed: boolean }> {
+        const lines = content.split('\n');
+        const items: Array<{ text: string; completed: boolean }> = [];
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            const match = trimmed.match(/^[-*+]\s*\[([ xX])\]\s*(.+)$/);
+            if (match) {
+                items.push({
+                    text: match[2].trim(),
+                    completed: match[1].toLowerCase() === 'x',
+                });
+            }
+        }
+
+        return items;
     }
 }

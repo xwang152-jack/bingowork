@@ -127,9 +127,8 @@ class TodoWriteExecutor extends BaseToolExecutor {
         // Import CoreTools dynamically to avoid circular dependency
         const { permissionManager } = await import('../../security/PermissionManager');
         const authorizedFolders = permissionManager.getAuthorizedFolders();
-        const defaultPath = authorizedFolders.length > 0
-            ? `${authorizedFolders[0]}/.bingowork-todo.json`
-            : undefined;
+        // Use the first authorized folder as default directory (TODO.md will be appended)
+        const defaultDir = authorizedFolders.length > 0 ? authorizedFolders[0] : undefined;
 
         const { CoreTools } = await import('../../tools/CoreTools');
         const coreTools = new CoreTools();
@@ -138,7 +137,7 @@ class TodoWriteExecutor extends BaseToolExecutor {
             action: args.action,
             path: args.path,
             content: args.content || ''
-        }, defaultPath);
+        }, defaultDir);
     }
 }
 
