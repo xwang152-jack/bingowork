@@ -28,6 +28,14 @@ export function RightSidebar() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const prevStageRef = useRef<string>('IDLE');
+  const progressListRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll progress list
+  useEffect(() => {
+    if (progressListRef.current) {
+      progressListRef.current.scrollTop = progressListRef.current.scrollHeight;
+    }
+  }, [steps.length]);
 
   const toggleSection = (section: keyof typeof sections) => {
     setSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -287,16 +295,30 @@ export function RightSidebar() {
             ) : (
               <>
                 {steps.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {steps.map((s) => (
-                      <div key={s.callId} className="flex items-center">
-                        {s.status === 'done' ? (
-                          <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
-                        ) : s.status === 'error' ? (
-                          <CheckCircle2 size={18} className="text-red-500 shrink-0" />
-                        ) : (
-                          <Circle size={18} className="text-[#E85D3E] shrink-0 animate-pulse" />
-                        )}
+                  <div 
+                    ref={progressListRef}
+                    className="space-y-4 max-h-[240px] overflow-y-auto custom-scrollbar pr-2"
+                  >
+                    {steps.map((s, index) => (
+                      <div key={s.callId} className="flex items-start gap-3">
+                        <div className={`
+                          flex items-center justify-center w-6 h-6 rounded-full border text-xs font-medium shrink-0 transition-colors
+                          ${s.status === 'running'
+                            ? 'border-blue-500 text-blue-600 bg-blue-50'
+                            : s.status === 'error'
+                              ? 'border-red-500 text-red-600 bg-red-50'
+                              : 'border-stone-200 text-stone-400 bg-stone-50'
+                          }
+                        `}>
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <p className={`text-sm truncate transition-colors ${
+                            s.status === 'running' ? 'text-stone-900 font-medium' : 'text-stone-500'
+                          }`}>
+                            {s.name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>
