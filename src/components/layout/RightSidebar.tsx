@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Circle, FileCode, ChevronDown, ChevronRight, Folder, Globe, Terminal } from 'lucide-react';
+import { CheckCircle2, Circle, FileCode, ChevronDown, ChevronRight, Folder, Globe, Terminal, CheckSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useConfig } from '../../hooks/useIPC';
 
 export function RightSidebar() {
@@ -7,6 +7,7 @@ export function RightSidebar() {
   const [sections, setSections] = useState({
     progress: true,
     artifacts: true,
+    todos: true,
     context: true,
   });
 
@@ -20,6 +21,11 @@ export function RightSidebar() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [connectors, setConnectors] = useState<string[]>([]);
   const [workingFiles, setWorkingFiles] = useState<string[]>([]);
+  const [todoList, setTodoList] = useState<{ text: string; completed: boolean }[]>([]);
+  const [todoExists, setTodoExists] = useState<boolean>(false);
+  const [showAddTodo, setShowAddTodo] = useState(false);
+  const [newTodoText, setNewTodoText] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const prevStageRef = useRef<string>('IDLE');
 
@@ -167,12 +173,89 @@ export function RightSidebar() {
     };
   }, []);
 
+  // Load todo list on mount and when authorized folders change
+  useEffect(() => {
+    const loadTodoList = async () => {
+      try {
+        const result = await window.ipcRenderer.invoke('todo:list') as {
+          items: Array<{ text: string; completed: boolean }>;
+          sourcePath: string;
+          exists: boolean;
+        };
+        setTodoList(result.items);
+        setTodoExists(result.exists);
+      } catch (error) {
+        console.error('Failed to load todo list:', error);
+      }
+    };
+
+    loadTodoList();
+  }, [selectedFolders]);
+
+  // Listen for todo updates
+  useEffect(() => {
+    const removeTodoUpdated = window.ipcRenderer.on('todo:updated', (_event, payload) => {
+      const p = payload as { items?: Array<{ text: string; completed: boolean }>; sourcePath?: string; exists?: boolean } | undefined;
+      setTodoList(p?.items || []);
+      setTodoExists(p?.exists || false);
+    });
+
+    return () => { removeTodoUpdated(); };
+  }, []);
+
   const openPath = async (p: string) => {
     const res = await window.ipcRenderer.invoke('shell:open-path', p);
     const r = res as { success?: boolean; error?: string; candidates?: string } | undefined;
     if (r && r.success === false) {
       const details = r.candidates ? `\n\n尝试过的路径:\n${r.candidates}` : '';
       alert(`${r.error || '无法打开'}${details}`);
+    }
+  };
+
+  // Todo interaction functions
+  const handleToggleTodo = async (index: number) => {
+    try {
+      await window.ipcRenderer.invoke('todo:toggle', index);
+    } catch (error) {
+      console.error('Failed to toggle todo:', error);
+    }
+  };
+
+  const handleDeleteTodo = async (index: number) => {
+    try {
+      await window.ipcRenderer.invoke('todo:delete', index);
+    } catch (error) {
+      console.error('Failed to delete todo:', error);
+    }
+  };
+
+  const handleAddTodo = async () => {
+    if (!newTodoText.trim()) return;
+    try {
+      await window.ipcRenderer.invoke('todo:add', newTodoText.trim());
+      setNewTodoText('');
+      setShowAddTodo(false);
+    } catch (error) {
+      console.error('Failed to add todo:', error);
+    }
+  };
+
+  const handleRefreshTodos = async () => {
+    setIsRefreshing(true);
+    try {
+      await window.ipcRenderer.invoke('todo:refresh');
+    } catch (error) {
+      console.error('Failed to refresh todos:', error);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  const handleClearCompleted = async () => {
+    try {
+      await window.ipcRenderer.invoke('todo:clear-completed');
+    } catch (error) {
+      console.error('Failed to clear completed todos:', error);
     }
   };
 
@@ -255,6 +338,140 @@ export function RightSidebar() {
               </div>
             ) : (
               <p className="text-xs text-stone-500 leading-relaxed">暂无产出物（写入文件后会出现在这里）。</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Todo Section */}
+      <div className="border-b border-stone-200/50">
+        <SectionHeader
+          title="任务列表"
+          isOpen={sections.todos}
+          onToggle={() => toggleSection('todos')}
+        />
+        {sections.todos && (
+          <div className="px-5 pb-4">
+            {/* Todo actions header */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-stone-500">任务</span>
+                {todoList.length > 0 && (
+                  <span className="bg-stone-200/60 px-2 py-0.5 rounded-lg text-[10px] font-medium">
+                    {todoList.filter(t => t.completed).length}/{todoList.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowAddTodo(!showAddTodo)}
+                  className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
+                  title="添加任务"
+                  type="button"
+                >
+                  <Plus size={14} className="text-stone-500" />
+                </button>
+                <button
+                  onClick={() => void handleRefreshTodos()}
+                  className={`p-1.5 hover:bg-white/50 rounded-lg transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
+                  title="刷新"
+                  type="button"
+                >
+                  <RefreshCw size={14} className="text-stone-500" />
+                </button>
+                {todoList.some(t => t.completed) && (
+                  <button
+                    onClick={() => void handleClearCompleted()}
+                    className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
+                    title="清除已完成"
+                    type="button"
+                  >
+                    <Trash2 size={14} className="text-stone-400" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Add new todo input */}
+            {showAddTodo && (
+              <div className="mb-3 flex gap-2">
+                <input
+                  type="text"
+                  value={newTodoText}
+                  onChange={(e) => setNewTodoText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleAddTodo();
+                    if (e.key === 'Escape') {
+                      setShowAddTodo(false);
+                      setNewTodoText('');
+                    }
+                  }}
+                  placeholder="新任务..."
+                  className="flex-1 px-3 py-2 text-sm bg-white/60 border border-stone-200/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300/50"
+                  autoFocus
+                />
+                <button
+                  onClick={() => void handleAddTodo()}
+                  disabled={!newTodoText.trim()}
+                  className="px-3 py-2 text-sm bg-stone-700 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  type="button"
+                >
+                  添加
+                </button>
+              </div>
+            )}
+
+            {!todoExists ? (
+              <div className="text-center py-6">
+                <CheckSquare size={32} className="text-stone-300 mx-auto mb-2" />
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  在授权文件夹中创建 TODO.md 文件以显示任务列表
+                </p>
+              </div>
+            ) : todoList.length === 0 ? (
+              <div className="text-center py-6">
+                <CheckSquare size={32} className="text-stone-300 mx-auto mb-2" />
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  TODO.md 文件为空或没有找到任务项
+                </p>
+                <p className="text-xs text-stone-400 mt-1">点击上方 + 添加任务</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {todoList.map((todo, index) => (
+                  <div
+                    key={index}
+                    className="group flex items-start gap-2 p-2 rounded-lg hover:bg-white/50 transition-colors"
+                  >
+                    <button
+                      onClick={() => void handleToggleTodo(index)}
+                      className="shrink-0 mt-0.5 hover:scale-110 transition-transform"
+                      type="button"
+                    >
+                      {todo.completed ? (
+                        <CheckCircle2 size={16} className="text-emerald-500" />
+                      ) : (
+                        <Circle size={16} className="text-stone-300 hover:text-stone-400" />
+                      )}
+                    </button>
+                    <span
+                      className={`text-sm leading-relaxed break-words flex-1 ${
+                        todo.completed ? 'text-stone-400 line-through' : 'text-stone-700'
+                      }`}
+                    >
+                      {todo.text}
+                    </span>
+                    <button
+                      onClick={() => void handleDeleteTodo(index)}
+                      className="opacity-0 group-hover:opacity-100 shrink-0 p-1 hover:bg-stone-200/50 rounded transition-all"
+                      title="删除任务"
+                      type="button"
+                    >
+                      <Trash2 size={12} className="text-stone-400 hover:text-red-500" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

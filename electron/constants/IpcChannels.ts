@@ -146,6 +146,15 @@ export const SKILLS_CHANNELS = {
 } as const;
 
 /**
+ * Todo management IPC channels
+ */
+export const TODO_CHANNELS = {
+  LIST: 'todo:list',
+  REFRESH: 'todo:refresh',
+  UPDATED: 'todo:updated',
+} as const;
+
+/**
  * All IPC channels grouped by category
  */
 export const IPC_CHANNELS = {
@@ -161,6 +170,7 @@ export const IPC_CHANNELS = {
   SHORTCUT: SHORTCUT_CHANNELS,
   MCP: MCP_CHANNELS,
   SKILLS: SKILLS_CHANNELS,
+  TODO: TODO_CHANNELS,
 } as const;
 
 /**
@@ -178,7 +188,8 @@ export type IpcChannel =
   | (typeof FLOATING_BALL_CHANNELS)[keyof typeof FLOATING_BALL_CHANNELS]
   | (typeof SHORTCUT_CHANNELS)[keyof typeof SHORTCUT_CHANNELS]
   | (typeof MCP_CHANNELS)[keyof typeof MCP_CHANNELS]
-  | (typeof SKILLS_CHANNELS)[keyof typeof SKILLS_CHANNELS];
+  | (typeof SKILLS_CHANNELS)[keyof typeof SKILLS_CHANNELS]
+  | (typeof TODO_CHANNELS)[keyof typeof TODO_CHANNELS];
 
 /**
  * Event-only channels (main → renderer, one-way communication)
@@ -198,6 +209,7 @@ export const EVENT_CHANNELS = {
   [CONFIG_CHANNELS.UPDATED]: true,
   [MODEL_CHANNELS.UPDATED]: true,
   [FLOATING_BALL_CHANNELS.STATE_CHANGED]: true,
+  [TODO_CHANNELS.UPDATED]: true,
 } as const;
 
 /**

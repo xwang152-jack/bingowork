@@ -14,6 +14,7 @@ import { registerMCPHandlers, setAgentInstance as setMCPAgentInstance } from './
 import { registerSkillsHandlers } from './skillsHandlers';
 import { registerFloatingBallHandlers } from './floatingBallHandlers';
 import { registerShellHandlers } from './shellHandlers';
+import { registerTodoHandlers } from './todoHandlers';
 import type { TaskDatabase } from '../../config/TaskDatabase';
 
 /**
@@ -32,6 +33,7 @@ export function registerAllIPCHandlers(taskDb: TaskDatabase | null): void {
   registerSkillsHandlers();
   registerFloatingBallHandlers();
   registerShellHandlers();
+  registerTodoHandlers();
 }
 
 // Export instance setters

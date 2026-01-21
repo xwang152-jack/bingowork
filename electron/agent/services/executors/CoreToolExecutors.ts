@@ -64,7 +64,25 @@ class AskUserQuestionExecutor extends BaseToolExecutor {
 
 const TodoWriteSchema: Anthropic.Tool = {
     name: 'todo_write',
-    description: 'Create, read, update, or delete a todo list in a JSON file. Use this to track progress on multi-step tasks. Each todo has: content (required), status (pending/in_progress/completed), and activeForm (present continuous verb phrase).',
+    description: `**CRITICAL: MANDATORY FOR MULTI-STEP TASKS**
+
+    Create and manage a task list for tracking progress on complex workflows.
+
+    WHEN YOU MUST USE THIS TOOL (MANDATORY):
+    - Tasks with 3+ steps or operations
+    - Multiple file operations (read/write/create several files)
+    - Complex workflows requiring multiple phases
+    - Component/module/feature creation
+    - Refactoring, migration, or setup work
+    - Any task estimated to take >2 minutes
+
+    WHEN TO SKIP (Simple tasks):
+    - Simple questions requiring single response
+    - Single file read operations
+    - Trivial fixes (<10 seconds)
+    - Informational queries
+
+    This is NOT optional for complex tasks - users expect progress tracking.`,
     input_schema: {
         type: 'object',
         properties: {

@@ -79,6 +79,22 @@ export interface SkillInfo {
 }
 
 // ============================================
+// Todo Types
+// ============================================
+
+export interface TodoItem {
+  text: string;
+  completed: boolean;
+}
+
+export interface TodoList {
+  items: TodoItem[];
+  sourcePath: string;
+  exists: boolean;
+  lastModified?: number;
+}
+
+// ============================================
 // IPC Event Types
 // ============================================
 
@@ -104,6 +120,9 @@ export interface IPCEvents {
 
     // Config events
     'config:updated': AppConfigDTO;
+
+    // Todo events
+    'todo:updated': TodoList;
 }
 
 // ============================================
@@ -137,6 +156,10 @@ export interface IPCInvokeChannels {
     'skill:list': () => SkillInfo[];
     'skill:enable': (name: string) => void;
     'skill:disable': (name: string) => void;
+
+    // Todo operations
+    'todo:list': () => TodoList;
+    'todo:refresh': () => TodoList;
 
     // System operations
     'system:openPath': (path: string) => void;

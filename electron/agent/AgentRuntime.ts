@@ -8,6 +8,7 @@ import { MCPClientService } from './mcp/MCPClientService';
 import { ApiProvider, WorkMode, configStore } from '../config/ConfigStore';
 import { PromptService } from './services/PromptService';
 import { ToolRegistry } from './services/ToolRegistry';
+import { TaskAnalyzer } from './services/TaskAnalyzer';
 import { permissionManager } from './security/PermissionManager';
 import { BaseLLMProvider } from './providers/BaseLLMProvider';
 import { AnthropicProvider } from './providers/AnthropicProvider';
@@ -43,6 +44,7 @@ export class AgentRuntime {
     private mcpService: MCPClientService;
     private promptService: PromptService;
     private toolRegistry: ToolRegistry;
+    private taskAnalyzer: TaskAnalyzer;
 
     private abortController: AbortController | null = null;
     private isProcessing = false;
@@ -86,6 +88,7 @@ export class AgentRuntime {
 
         // Initialize Services
         this.promptService = new PromptService();
+        this.taskAnalyzer = new TaskAnalyzer();
         this.toolRegistry = new ToolRegistry(
             this.fsTools,
             this.browserTools,
@@ -291,10 +294,38 @@ export class AgentRuntime {
                 this.mcpLoaded = true;
             }
 
+            // Task complexity analysis for TodoWrite enforcement (Cowork mode only)
             let userContent: string | Anthropic.ContentBlockParam[] = '';
+            let userText = '';
 
             if (typeof input === 'string') {
-                userContent = input;
+                userText = input;
+            } else {
+                userText = input.content || '';
+            }
+
+            // Analyze task complexity and inject reminder if needed (Cowork mode only)
+            if (this.workMode === 'cowork' && userText.trim()) {
+                const analysis = this.taskAnalyzer.analyzeMessage(userText);
+
+                if (analysis.requiresTodo) {
+                    logs.agent.info(`[TaskAnalyzer] Complex task detected (score: ${analysis.score}), complexity: ${analysis.complexity}`);
+
+                    // Inject system reminder to use TodoWrite
+                    const reminder = this.buildTodoReminder(analysis);
+                    userText = reminder + '\n\n' + userText;
+
+                    // Broadcast to UI that TodoWrite is recommended
+                    this.broadcast('agent:todo-recommended', {
+                        complexity: analysis.complexity,
+                        reason: analysis.reason,
+                        estimatedSteps: analysis.estimatedSteps
+                    });
+                }
+            }
+
+            if (typeof input === 'string') {
+                userContent = userText;
             } else {
                 const blocks: Anthropic.ContentBlockParam[] = [];
 
@@ -576,6 +607,37 @@ export class AgentRuntime {
         this.stage = stage;
         this.broadcast('agent:stage', { stage, detail });
         this.eventSink?.logEvent('stage', { stage, detail });
+    }
+
+    // Build TodoWrite reminder message based on task analysis
+    private buildTodoReminder(analysis: { complexity: string; reason: string; estimatedSteps?: number }): string {
+        return `<SYSTEM REMINDER>
+================================================================================
+COMPLEX TASK DETECTED - TODO_WRITE USAGE REQUIRED
+================================================================================
+
+Task Analysis:
+• Complexity: ${analysis.complexity.toUpperCase()}
+• Reason: ${analysis.reason}
+• Estimated Steps: ${analysis.estimatedSteps || 'N/A'}
+
+ACTION REQUIRED:
+You MUST use the todo_write tool BEFORE proceeding with any other tools.
+
+Example format:
+<todo_write>
+{
+  "action": "add",
+  "todos": [
+    {"content": "First step", "status": "pending", "activeForm": "Starting first step"},
+    {"content": "Second step", "status": "pending", "activeForm": "Working on second step"}
+  ]
+}
+</todo_write>
+
+This helps users track progress on complex workflows.
+================================================================================
+</SYSTEM REMINDER>`;
     }
 
     // Broadcast to all windows

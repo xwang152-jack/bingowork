@@ -34,4 +34,5 @@ build
 .bingowork
 local-data
 CLAUDE.md
+Prompt.md
 

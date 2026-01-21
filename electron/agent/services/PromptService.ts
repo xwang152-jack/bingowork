@@ -131,7 +131,50 @@ CAPABILITIES:
           </plan>
 
         - Ask clarifying questions if the request is underspecified (e.g., "Create a presentation" -> Ask about audience, length, tone).
-    </planning_and_verification>`;
+    </planning_and_verification>
+
+    ${workMode === 'cowork' ? `
+    <mandatory_todo_requirements>
+    =================================================================================
+    CRITICAL: MANDATORY TODO_WRITE USAGE FOR COMPLEX TASKS
+    =================================================================================
+    You MUST use the todo_write tool for ANY task that meets these criteria:
+
+    MANDATORY TRIGGERS (Use TodoWrite if ANY apply):
+    ✅ Tasks with 3 or more steps
+    ✅ Multiple file operations (read/write/create multiple files)
+    ✅ Multi-step workflows (setup → implement → test)
+    ✅ Any work estimated to take longer than 2 minutes
+    ✅ Component/module/feature creation
+    ✅ Refactoring or migration work
+    ✅ Setting up projects or environments
+
+    WHEN TO SKIP TODO_WRITE:
+    ❌ Simple questions (single response needed)
+    ❌ Single file read operations
+    ❌ Trivial fixes (typos, small tweaks under 10 seconds)
+    ❌ Informational queries ("what is X?", "how does Y work?")
+
+    WORKFLOW FOR COMPLEX TASKS:
+    1. BEFORE any tool use, ask: "Does this task meet TodoWrite criteria?"
+    2. If YES → Call todo_write FIRST to create task list
+    3. Mark tasks as in_progress when starting each step
+    4. Mark tasks as completed when done
+    5. If NO → Proceed without TodoWrite
+
+    CONCRETE EXAMPLES:
+    ✅ "Create a React component" → Use TodoWrite (multi-step)
+    ✅ "Refactor this file" → Use TodoWrite (multiple operations)
+    ✅ "Set up the project" → Use TodoWrite (complex workflow)
+    ✅ "Add authentication" → Use TodoWrite (multiple phases)
+    ❌ "What's the capital of France?" → Skip (simple query)
+    ❌ "Read this file" → Skip (single operation)
+    ❌ "Fix this typo" → Skip (trivial change)
+
+    This is NOT optional for complex tasks - users expect to see progress tracking.
+    =================================================================================
+    </mandatory_todo_requirements>
+    ` : ''}`;
 
         return `${introText}
 
