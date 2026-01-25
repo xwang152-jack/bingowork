@@ -32,6 +32,18 @@ interface MarkdownRendererProps {
 }
 
 // Memoize the main renderer to avoid re-renders
+// 自定义比较函数，避免不必要的重新渲染
+const areMarkdownPropsEqual = (
+    prevProps: MarkdownRendererProps,
+    nextProps: MarkdownRendererProps
+) => {
+    return (
+        prevProps.content === nextProps.content &&
+        prevProps.isDark === nextProps.isDark &&
+        prevProps.className === nextProps.className
+    );
+};
+
 export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className = '', isDark = false }: MarkdownRendererProps) {
     // Memoize prose class
     const proseClass = useMemo(() => {
@@ -223,7 +235,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
             </ReactMarkdown>
         </div>
     );
-});
+}, areMarkdownPropsEqual);
 
 // Memoize MermaidDiagram component
 const MermaidDiagram = memo(function MermaidDiagram({ code, isDark }: { code: string, isDark: boolean }) {

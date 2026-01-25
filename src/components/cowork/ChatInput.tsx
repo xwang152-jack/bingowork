@@ -45,7 +45,7 @@ export function ChatInput({
         },
     });
 
-    // Memoize send handler
+    // 优化：减少依赖，避免每次输入都重新创建回调
     const handleSend = useCallback(() => {
         if (!content.trim() && images.length === 0) return;
 

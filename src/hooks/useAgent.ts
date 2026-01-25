@@ -27,6 +27,7 @@ export function useAgent(): UseAgentResult {
     const [error, setError] = useState<string | null>(null);
     const [streamingText, setStreamingText] = useState('');
     const streamingTextRef = useRef('');
+    const rafRef = useRef<number | null>(null);
 
     useEffect(() => {
         streamingTextRef.current = streamingText;
@@ -37,14 +38,20 @@ export function useAgent(): UseAgentResult {
             setHistory(updatedHistory as AgentMessage[]);
             setIsProcessing(false);
             setStreamingText('');
-            // Auto-save session
-            try {
-                // Create a clean copy without any non-serializable properties
-                const cleanHistory = JSON.parse(JSON.stringify(updatedHistory));
-                await window.ipcRenderer.invoke('session:save', cleanHistory);
-            } catch (err) {
-                console.error('Failed to save session:', err);
-            }
+
+            // 优化：异步保存会话，避免阻塞 UI
+            // 使用 setTimeout 将深拷贝操作推迟到下一个事件循环
+            setTimeout(() => {
+                try {
+                    // Create a clean copy without any non-serializable properties
+                    const cleanHistory = JSON.parse(JSON.stringify(updatedHistory));
+                    window.ipcRenderer.invoke('session:save', cleanHistory).catch((err) => {
+                        console.error('Failed to save session:', err);
+                    });
+                } catch (err) {
+                    console.error('Failed to save session:', err);
+                }
+            }, 0);
         });
 
         const removeErrorListener = window.ipcRenderer.on('agent:error', (_event, err) => {
@@ -59,9 +66,16 @@ export function useAgent(): UseAgentResult {
         });
 
         const removeStreamListener = window.ipcRenderer.on('agent:stream-token', (_event, token) => {
-            const newStreamingText = streamingTextRef.current + (token as string);
-            streamingTextRef.current = newStreamingText;
-            setStreamingText(newStreamingText);
+            // 累积 token 到 ref
+            streamingTextRef.current += (token as string);
+
+            // 使用 requestAnimationFrame 批处理更新，减少状态更新频率
+            if (rafRef.current) return;
+
+            rafRef.current = requestAnimationFrame(() => {
+                setStreamingText(streamingTextRef.current);
+                rafRef.current = null;
+            });
         });
 
         return () => {
@@ -69,6 +83,11 @@ export function useAgent(): UseAgentResult {
             removeErrorListener();
             removeStageListener();
             removeStreamListener();
+            // 清理 RAF
+            if (rafRef.current) {
+                cancelAnimationFrame(rafRef.current);
+                rafRef.current = null;
+            }
         };
     }, []);
 

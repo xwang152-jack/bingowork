@@ -111,10 +111,26 @@ export function MessageList({ messages, isDark = false, streamingText = '' }: Me
         };
     }, []);
 
+    // 优化：使用 requestAnimationFrame 节流滚动，避免频繁滚动
+    const rafRef = useRef<number | null>(null);
     useEffect(() => {
         if (!shouldStickToBottomRef.current) return;
-        scrollToBottom();
-    }, [visibleMessages.length, streamingText, toolStreamById, scrollToBottom]);
+
+        // 使用 RAF 节流，避免每次 token 都触发滚动
+        if (rafRef.current) return;
+
+        rafRef.current = requestAnimationFrame(() => {
+            scrollToBottom();
+            rafRef.current = null;
+        });
+
+        return () => {
+            if (rafRef.current) {
+                cancelAnimationFrame(rafRef.current);
+                rafRef.current = null;
+            }
+        };
+    }, [visibleMessages.length, streamingText.length, scrollToBottom]);
 
     if (visibleMessages.length === 0) {
         return <EmptyState />;
