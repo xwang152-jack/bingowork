@@ -46,6 +46,33 @@ export class TaskDatabase {
             CREATE INDEX IF NOT EXISTS idx_task_events_ts ON task_events(ts);
             CREATE INDEX IF NOT EXISTS idx_task_events_session_ts ON task_events(session_id, ts);
             CREATE INDEX IF NOT EXISTS idx_task_events_type_ts ON task_events(type, ts);
+
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL,
+                tags_json TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                content,
+                tags_json,
+                content='memories',
+                content_rowid='id'
+            );
+
+            -- Triggers to keep FTS in sync
+            CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                INSERT INTO memories_fts(rowid, content, tags_json) VALUES (new.id, new.content, new.tags_json);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+                INSERT INTO memories_fts(memories_fts, rowid, content, tags_json) VALUES('delete', old.id, old.content, old.tags_json);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+                INSERT INTO memories_fts(memories_fts, rowid, content, tags_json) VALUES('delete', old.id, old.content, old.tags_json);
+                INSERT INTO memories_fts(rowid, content, tags_json) VALUES (new.id, new.content, new.tags_json);
+            END;
         `);
     }
 
@@ -168,6 +195,52 @@ export class TaskDatabase {
         `);
         const result = stmt.run({ prefix: `${normalizedPrefix}%` });
         return result.changes;
+    }
+
+    /**
+     * Permanent Memory Methods
+     */
+
+    insertMemory(content: string, tagsJson: string): number {
+        const stmt = this.db.prepare(`
+            INSERT INTO memories (content, tags_json, created_at, updated_at)
+            VALUES (@content, @tags_json, @created_at, @updated_at)
+        `);
+        const result = stmt.run({
+            content,
+            tags_json: tagsJson,
+            created_at: Date.now(),
+            updated_at: Date.now()
+        });
+        return result.lastInsertRowid as number;
+    }
+
+    searchMemories(query: string, limit: number = 20): Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> {
+        const stmt = this.db.prepare(`
+            SELECT m.id, m.content, m.tags_json, m.created_at, m.updated_at
+            FROM memories m
+            JOIN memories_fts f ON m.id = f.rowid
+            WHERE memories_fts MATCH @query
+            ORDER BY rank
+            LIMIT @limit
+        `);
+        return stmt.all({ query, limit }) as any;
+    }
+
+    getRecentMemories(limit: number = 20): Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> {
+        const stmt = this.db.prepare(`
+            SELECT id, content, tags_json, created_at, updated_at
+            FROM memories
+            ORDER BY created_at DESC
+            LIMIT @limit
+        `);
+        return stmt.all({ limit }) as any;
+    }
+
+    deleteMemory(id: number): boolean {
+        const stmt = this.db.prepare('DELETE FROM memories WHERE id = @id');
+        const result = stmt.run({ id });
+        return result.changes > 0;
     }
 
     close() {

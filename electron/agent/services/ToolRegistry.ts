@@ -27,6 +27,7 @@ import { createBrowserToolExecutors } from './executors/BrowserToolExecutors';
 import { createSkillToolExecutors, isSkillTool } from './executors/SkillToolExecutor';
 import { createMCPToolExecutors, isMCPTool } from './executors/MCPToolExecutor';
 import { scheduleToolExecutors } from './executors/ScheduleToolExecutors';
+import { memoryToolExecutors } from './executors/MemoryToolExecutors';
 
 // ============================================================================
 // Public Interfaces
@@ -49,6 +50,7 @@ export class ToolRegistry {
     private fsToolExecutors: ToolExecutor[];
     private browserToolExecutors: ToolExecutor[];
     private scheduleToolExecutors: ToolExecutor[];
+    private memoryToolExecutors: ToolExecutor[];
 
     // Dynamic tool caches
     private skillToolExecutors: ToolExecutor[] = [];
@@ -67,6 +69,7 @@ export class ToolRegistry {
         this.fsToolExecutors = createFileSystemToolExecutors(fsTools);
         this.browserToolExecutors = createBrowserToolExecutors(browserTools);
         this.scheduleToolExecutors = scheduleToolExecutors;
+        this.memoryToolExecutors = memoryToolExecutors;
 
         // Register all executors to the global registry
         this.registerExecutors();
@@ -90,6 +93,11 @@ export class ToolRegistry {
 
         // Register schedule tools
         for (const executor of this.scheduleToolExecutors) {
+            toolExecutorRegistry.register(executor);
+        }
+
+        // Register memory tools
+        for (const executor of this.memoryToolExecutors) {
             toolExecutorRegistry.register(executor);
         }
     }
