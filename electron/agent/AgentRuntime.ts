@@ -698,4 +698,55 @@ This helps users track progress on complex workflows.
     public abort() {
         this.abortController?.abort();
     }
+
+    /**
+     * Execute a tool directly without LLM intervention
+     * Used by scheduled tasks for direct tool execution
+     */
+    async executeToolDirectly(toolName: string, args: Record<string, unknown>): Promise<string> {
+        logs.agent.info(`[executeToolDirectly] Executing tool: ${toolName}`);
+
+        // Check tool permission
+        const hasPermission = await this.checkToolPermission(toolName, args);
+        if (!hasPermission) {
+            throw new Error(`Permission denied for tool: ${toolName}`);
+        }
+
+        try {
+            // Execute the tool
+            const result = await this.toolRegistry.executeTool(toolName, args);
+            return result;
+        } catch (error) {
+            logs.agent.error(`[executeToolDirectly] Error executing ${toolName}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if tool execution requires permission
+     */
+    private async checkToolPermission(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+        // Extract path from args if available
+        const path = (args?.path || args?.cwd) as string | undefined;
+
+        // 1. Check if permission is already explicitly granted
+        if (configStore.hasPermission(toolName, path)) {
+            return true;
+        }
+
+        // 2. Auto-approve standard file writes in authorized folders
+        if (toolName === 'write_file' && path && permissionManager.isPathAuthorized(path)) {
+            return true;
+        }
+
+        // 3. For scheduled tasks, we don't want to show confirmation dialogs
+        // so we check if there's a saved permission
+        if (configStore.hasPermission(toolName, path)) {
+            return true;
+        }
+
+        // 4. Deny if no permission found
+        logs.agent.warn(`[executeToolDirectly] Permission denied for ${toolName} at path ${path || '(any)'}`);
+        return false;
+    }
 }

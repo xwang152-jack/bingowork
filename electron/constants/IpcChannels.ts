@@ -156,6 +156,27 @@ export const TODO_CHANNELS = {
 } as const;
 
 /**
+ * Schedule management IPC channels
+ */
+export const SCHEDULE_CHANNELS = {
+  LIST: 'schedule:list',
+  GET: 'schedule:get',
+  CREATE: 'schedule:create',
+  UPDATE: 'schedule:update',
+  DELETE: 'schedule:delete',
+  TOGGLE: 'schedule:toggle',
+  EXECUTE_NOW: 'schedule:execute-now',
+  GET_LOGS: 'schedule:get-logs',
+  GET_ALL_LOGS: 'schedule:get-all-logs',
+  // Events
+  TASK_CREATED: 'schedule:task-created',
+  TASK_UPDATED: 'schedule:task-updated',
+  TASK_DELETED: 'schedule:task-deleted',
+  TASK_EXECUTED: 'schedule:task-executed',
+  TASK_FAILED: 'schedule:task-failed',
+} as const;
+
+/**
  * All IPC channels grouped by category
  */
 export const IPC_CHANNELS = {
@@ -172,6 +193,7 @@ export const IPC_CHANNELS = {
   MCP: MCP_CHANNELS,
   SKILLS: SKILLS_CHANNELS,
   TODO: TODO_CHANNELS,
+  SCHEDULE: SCHEDULE_CHANNELS,
 } as const;
 
 /**
@@ -190,7 +212,8 @@ export type IpcChannel =
   | (typeof SHORTCUT_CHANNELS)[keyof typeof SHORTCUT_CHANNELS]
   | (typeof MCP_CHANNELS)[keyof typeof MCP_CHANNELS]
   | (typeof SKILLS_CHANNELS)[keyof typeof SKILLS_CHANNELS]
-  | (typeof TODO_CHANNELS)[keyof typeof TODO_CHANNELS];
+  | (typeof TODO_CHANNELS)[keyof typeof TODO_CHANNELS]
+  | (typeof SCHEDULE_CHANNELS)[keyof typeof SCHEDULE_CHANNELS];
 
 /**
  * Event-only channels (main → renderer, one-way communication)
@@ -211,6 +234,11 @@ export const EVENT_CHANNELS = {
   [MODEL_CHANNELS.UPDATED]: true,
   [FLOATING_BALL_CHANNELS.STATE_CHANGED]: true,
   [TODO_CHANNELS.UPDATED]: true,
+  [SCHEDULE_CHANNELS.TASK_CREATED]: true,
+  [SCHEDULE_CHANNELS.TASK_UPDATED]: true,
+  [SCHEDULE_CHANNELS.TASK_DELETED]: true,
+  [SCHEDULE_CHANNELS.TASK_EXECUTED]: true,
+  [SCHEDULE_CHANNELS.TASK_FAILED]: true,
 } as const;
 
 /**

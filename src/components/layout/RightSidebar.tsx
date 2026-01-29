@@ -295,7 +295,7 @@ export function RightSidebar() {
             ) : (
               <>
                 {steps.length > 0 ? (
-                  <div 
+                  <div
                     ref={progressListRef}
                     className="space-y-4 max-h-[240px] overflow-y-auto custom-scrollbar pr-2"
                   >
@@ -313,9 +313,8 @@ export function RightSidebar() {
                           {index + 1}
                         </div>
                         <div className="flex-1 min-w-0 pt-0.5">
-                          <p className={`text-sm truncate transition-colors ${
-                            s.status === 'running' ? 'text-stone-900 font-medium' : 'text-stone-500'
-                          }`}>
+                          <p className={`text-sm truncate transition-colors ${s.status === 'running' ? 'text-stone-900 font-medium' : 'text-stone-500'
+                            }`}>
                             {s.name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                           </p>
                         </div>
@@ -459,7 +458,7 @@ export function RightSidebar() {
                 <p className="text-xs text-stone-400 mt-1">点击上方 + 添加任务</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 max-h-[240px] overflow-y-auto custom-scrollbar pr-2">
                 {todoList.map((todo, index) => (
                   <div
                     key={index}
@@ -477,9 +476,8 @@ export function RightSidebar() {
                       )}
                     </button>
                     <span
-                      className={`text-sm leading-relaxed break-words flex-1 ${
-                        todo.completed ? 'text-stone-400 line-through' : 'text-stone-700'
-                      }`}
+                      className={`text-sm leading-relaxed break-words flex-1 ${todo.completed ? 'text-stone-400 line-through' : 'text-stone-700'
+                        }`}
                     >
                       {todo.text}
                     </span>

@@ -15,6 +15,7 @@ import { registerSkillsHandlers } from './skillsHandlers';
 import { registerFloatingBallHandlers } from './floatingBallHandlers';
 import { registerShellHandlers } from './shellHandlers';
 import { registerTodoHandlers } from './todoHandlers';
+import { registerScheduleHandlers, setScheduleManager } from './scheduleHandlers';
 import type { TaskDatabase } from '../../config/TaskDatabase';
 
 /**
@@ -34,10 +35,11 @@ export function registerAllIPCHandlers(taskDb: TaskDatabase | null): void {
   registerFloatingBallHandlers();
   registerShellHandlers();
   registerTodoHandlers();
+  registerScheduleHandlers();
 }
 
 // Export instance setters
-export { setAgentInstance, setTaskDatabase };
+export { setAgentInstance, setTaskDatabase, setScheduleManager };
 
 /**
  * Set agent instance for all handlers that need it

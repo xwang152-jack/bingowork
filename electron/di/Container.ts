@@ -229,6 +229,9 @@ export const Tokens = {
   // Utils
   LRUCache: Symbol('LRUCache'),
   EventPublisher: Symbol('EventPublisher'),
+
+  // Schedule
+  ScheduleManager: Symbol('ScheduleManager'),
 } as const;
 
 export type ServiceToken = typeof Tokens[keyof typeof Tokens];

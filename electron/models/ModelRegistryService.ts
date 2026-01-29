@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import { SecureCredentials } from '../config/SecureCredentials';
 import type { TaskDatabase } from '../config/TaskDatabase';
 import {
@@ -231,7 +231,7 @@ export class ModelRegistryService {
 
         const protocol: ProviderProtocol = input.protocol || 'openai';
         const providerId = normalizeId(providerName);
-        const id = `custom-${uuidv4()}`;
+        const id = `custom-${nanoid()}`;
         const now = Date.now();
 
         const registry = this.loadRegistry();

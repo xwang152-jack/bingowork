@@ -405,4 +405,5 @@ export const logs = {
     db: logger.getScope('Database'),
     config: logger.getScope('Config'),
     skill: logger.getScope('Skill'),
+    schedule: logger.getScope('Schedule'),
 };

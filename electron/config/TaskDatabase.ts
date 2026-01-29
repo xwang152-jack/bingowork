@@ -127,6 +127,49 @@ export class TaskDatabase {
         });
     }
 
+    /**
+     * Get all KV entries with a given prefix
+     * Useful for querying related data (e.g., all schedule tasks)
+     */
+    getKVByPrefix<T = unknown>(prefix: string): Map<string, T> {
+        const normalizedPrefix = String(prefix || '').trim();
+        if (!normalizedPrefix) {
+            throw new Error('KV prefix is required');
+        }
+
+        const stmt = this.db.prepare(`
+            SELECT key, value_json FROM kv_store WHERE key LIKE @prefix
+        `);
+        const rows = stmt.all({ prefix: `${normalizedPrefix}%` }) as Array<{ key: string; value_json: string }>;
+        const result = new Map<string, T>();
+        for (const row of rows) {
+            try {
+                result.set(row.key, JSON.parse(row.value_json) as T);
+            } catch {
+                // Skip invalid JSON entries
+                console.warn(`[TaskDatabase] Failed to parse JSON for key: ${row.key}`);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Delete all KV entries with a given prefix
+     * Useful for bulk deletion of related data
+     */
+    deleteKVByPrefix(prefix: string): number {
+        const normalizedPrefix = String(prefix || '').trim();
+        if (!normalizedPrefix) {
+            throw new Error('KV prefix is required');
+        }
+
+        const stmt = this.db.prepare(`
+            DELETE FROM kv_store WHERE key LIKE @prefix
+        `);
+        const result = stmt.run({ prefix: `${normalizedPrefix}%` });
+        return result.changes;
+    }
+
     close() {
         this.db.close();
     }

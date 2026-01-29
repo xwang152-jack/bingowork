@@ -24,6 +24,7 @@ import { AnthropicProvider } from '../agent/providers/AnthropicProvider';
 import { OpenAIProvider } from '../agent/providers/OpenAIProvider';
 import { MiniMaxProvider } from '../agent/providers/MiniMaxProvider';
 import { LRUCache } from '../../src/utils/LRUCache';
+import { ScheduleManager } from '../agent/schedule/ScheduleManager';
 
 /**
  * Register all core services with the container
@@ -114,6 +115,15 @@ export function registerCoreServices(container: Container = getGlobalContainer()
       const apiUrl = configStore.get('apiUrl') || 'https://api.anthropic.com';
 
       return createLLMProvider(provider, apiKey, apiUrl);
+    }
+  );
+
+  // === Schedule Manager ===
+  container.registerSingleton(
+    Tokens.ScheduleManager,
+    (container) => {
+      const taskDatabase = container.resolve<TaskDatabase>(Tokens.TaskDatabase);
+      return new ScheduleManager(taskDatabase);
     }
   );
 
@@ -245,6 +255,10 @@ export class ServiceResolver {
 
   getToolRegistry() {
     return this.container.resolve<ToolRegistry>(Tokens.ToolRegistry);
+  }
+
+  getScheduleManager() {
+    return this.container.resolve<ScheduleManager>(Tokens.ScheduleManager);
   }
 }
 

@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 import path from 'path';
 import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import Anthropic from '@anthropic-ai/sdk';
 
 export interface Session {
@@ -60,7 +60,7 @@ export class SessionStore {
     // Create new session
     createSession(title?: string): Session {
         const session: Session = {
-            id: uuidv4(),
+            id: nanoid(),
             title: title || '新会话',
             createdAt: Date.now(),
             updatedAt: Date.now(),

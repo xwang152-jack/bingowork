@@ -18,7 +18,10 @@ import { getShortcutManager } from './services/ShortcutManager';
 import { getAgentInitializer } from './services/AgentInitializer';
 
 // IPC Handlers
-import { registerAllIPCHandlers, setAgentInstance, setMainWindow, setTaskDatabase } from './ipc/handlers';
+import { registerAllIPCHandlers, setAgentInstance, setMainWindow, setTaskDatabase, setScheduleManager } from './ipc/handlers';
+
+// Schedule Manager
+import { getScheduleManager, initializeScheduleManager } from './agent/schedule/ScheduleManager';
 
 // Extend App type to include isQuitting property
 declare global {
@@ -46,6 +49,12 @@ app.on('before-quit', () => {
     taskDb?.close();
   } catch (error) {
     console.error('[Cleanup] Failed to close task database:', error);
+  }
+
+  // Cleanup schedule manager
+  const scheduleManager = getScheduleManager();
+  if (scheduleManager) {
+    scheduleManager.cleanup();
   }
 
   // Cleanup managers
@@ -105,6 +114,12 @@ app.whenReady().then(async () => {
     setTaskDatabase(taskDb);
     setMainWindow(mainWindow);
 
+    // 7.5. Initialize ScheduleManager
+    if (taskDb) {
+      const scheduleManager = initializeScheduleManager(taskDb);
+      setScheduleManager(scheduleManager);
+    }
+
     // 8. Create system tray
     const trayManager = getTrayManager();
     trayManager.setWindows(mainWindow, floatingBallWindow);
@@ -139,6 +154,15 @@ app.whenReady().then(async () => {
         // Set agent instance for IPC handlers
         if (agent) {
           setAgentInstance(agent);
+        }
+
+        // Set agent for ScheduleManager and start it
+        const scheduleManager = getScheduleManager();
+        if (scheduleManager) {
+          scheduleManager.setAgent(agent);
+          scheduleManager.setMainWindow(mainWindow);
+          await scheduleManager.start();
+          console.log('[ScheduleManager] Started');
         }
 
         // Notify renderer that agent is ready

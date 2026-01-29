@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye } from 'lucide-react';
+import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye, Clock } from 'lucide-react';
 import { SkillEditor } from './SkillEditor';
 import { ModelSettings } from './settings/ModelSettings';
+import { ScheduleView } from './schedule/ScheduleView';
 
 // Constants
 const UI_TIMEOUTS = {
@@ -58,7 +59,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
         shortcut: 'Alt+Space'
     });
     const [saved, setSaved] = useState(false);
-    const [activeTab, setActiveTab] = useState<'api' | 'folders' | 'mcp' | 'skills' | 'advanced'>('api');
+    const [activeTab, setActiveTab] = useState<'api' | 'folders' | 'mcp' | 'skills' | 'schedule' | 'advanced'>('api');
     const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
 
     // MCP State
@@ -223,6 +224,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                         { id: 'folders' as const, label: '权限', icon: <FolderOpen size={14} /> },
                         { id: 'mcp' as const, label: 'MCP', icon: <Server size={14} /> },
                         { id: 'skills' as const, label: 'Skills', icon: <Zap size={14} /> },
+                        { id: 'schedule' as const, label: '定时任务', icon: <Clock size={14} /> },
                         { id: 'advanced' as const, label: '高级', icon: <Settings size={14} /> },
                     ].map(tab => (
                         <button
@@ -408,6 +410,17 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {activeTab === 'schedule' && (
+                            <div
+                                role="tabpanel"
+                                id="settings-panel-schedule"
+                                aria-labelledby="settings-tab-schedule"
+                                className="h-full"
+                            >
+                                <ScheduleView />
                             </div>
                         )}
 

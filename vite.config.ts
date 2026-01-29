@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -20,7 +23,9 @@ export default defineConfig({
                 'sequelize',
                 'better-sqlite3',
                 'keytar',
-                '@modelcontextprotocol/sdk'
+                '@modelcontextprotocol/sdk',
+                'node-cron',
+                'cron-parser'
               ],
             },
           }
@@ -39,7 +44,9 @@ export default defineConfig({
                 'sequelize',
                 'better-sqlite3',
                 'keytar',
-                '@modelcontextprotocol/sdk'
+                '@modelcontextprotocol/sdk',
+                'node-cron',
+                'cron-parser'
               ],
             },
           }
