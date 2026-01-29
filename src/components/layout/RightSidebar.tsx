@@ -118,6 +118,15 @@ export function RightSidebar() {
       const name = String(p?.name || '');
       if (!callId || !name) return;
 
+      // Filter out silent tools (memory tools)
+      const SILENT_TOOLS = new Set([
+        'record_fact',
+        'search_memory',
+        'list_memories',
+        'forget_fact'
+      ]);
+      if (SILENT_TOOLS.has(name)) return;
+
       trackConnector(name);
 
       if (name === 'read_file' || name === 'write_file') {
