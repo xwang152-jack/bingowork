@@ -129,7 +129,7 @@ export class IPCService {
 
     // Race between actual call and timeout
     const response = await Promise.race([
-      window.ipcRenderer.invoke(channel, ...args),
+      window.ipcRenderer ? window.ipcRenderer.invoke(channel, ...args) : Promise.resolve(null),
       timeoutPromise,
     ]);
 

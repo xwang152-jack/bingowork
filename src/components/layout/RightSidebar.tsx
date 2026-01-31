@@ -89,6 +89,8 @@ export function RightSidebar() {
   };
 
   useEffect(() => {
+    if (!window.ipcRenderer) return;
+
     const removeStage = window.ipcRenderer.on('agent:stage', (_event, payload) => {
       const nextStage = (payload as { stage?: string })?.stage || 'IDLE';
       const prevStage = prevStageRef.current;
@@ -193,6 +195,8 @@ export function RightSidebar() {
   // Load todo list on mount and when authorized folders change
   useEffect(() => {
     const loadTodoList = async () => {
+      if (!window.ipcRenderer) return;
+
       try {
         const result = await window.ipcRenderer.invoke('todo:list') as {
           items: Array<{ text: string; completed: boolean }>;
@@ -211,6 +215,8 @@ export function RightSidebar() {
 
   // Listen for todo updates
   useEffect(() => {
+    if (!window.ipcRenderer) return;
+
     const removeTodoUpdated = window.ipcRenderer.on('todo:updated', (_event, payload) => {
       const p = payload as { items?: Array<{ text: string; completed: boolean }>; sourcePath?: string; exists?: boolean } | undefined;
       setTodoList(p?.items || []);
@@ -221,6 +227,10 @@ export function RightSidebar() {
   }, []);
 
   const openPath = async (p: string) => {
+    if (!window.ipcRenderer) {
+      console.warn('Cannot open path in browser environment');
+      return;
+    }
     const res = await window.ipcRenderer.invoke('shell:open-path', p);
     const r = res as { success?: boolean; error?: string; candidates?: string } | undefined;
     if (r && r.success === false) {
@@ -231,6 +241,7 @@ export function RightSidebar() {
 
   // Todo interaction functions
   const handleToggleTodo = async (index: number) => {
+    if (!window.ipcRenderer) return;
     try {
       await window.ipcRenderer.invoke('todo:toggle', index);
     } catch (error) {
@@ -239,6 +250,7 @@ export function RightSidebar() {
   };
 
   const handleDeleteTodo = async (index: number) => {
+    if (!window.ipcRenderer) return;
     try {
       await window.ipcRenderer.invoke('todo:delete', index);
     } catch (error) {

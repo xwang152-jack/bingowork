@@ -1,6 +1,8 @@
 import { useState, lazy, Suspense } from 'react';
 import { Minus, Square, X } from 'lucide-react';
 import { ConfirmDialog, useConfirmations } from './components/ConfirmDialog';
+import { UserQuestionDialog } from './components/UserQuestionDialog';
+import { useUserQuestions } from './hooks/useUserQuestions';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Code splitting for better performance
@@ -18,6 +20,7 @@ const LoadingFallback = () => (
 function App() {
   const [showSettings, setShowSettings] = useState(false);
   const { pendingRequest, handleConfirm, handleDeny } = useConfirmations();
+  const { pendingQuestion, handleAnswer } = useUserQuestions();
 
   // Check if this is the floating ball window
   const isFloatingBall = window.location.hash === '#/floating-ball' || window.location.hash === '#floating-ball';
@@ -90,6 +93,11 @@ function App() {
         request={pendingRequest}
         onConfirm={handleConfirm}
         onDeny={handleDeny}
+      />
+
+      <UserQuestionDialog 
+        request={pendingQuestion}
+        onAnswer={handleAnswer}
       />
     </div>
     </ErrorBoundary>

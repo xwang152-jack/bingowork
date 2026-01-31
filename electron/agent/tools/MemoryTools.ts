@@ -30,13 +30,13 @@ export const RecordFactSchema: Anthropic.Tool = {
  */
 export const SearchMemorySchema: Anthropic.Tool = {
     name: 'search_memory',
-    description: 'Search through previously saved facts and permanent memories. Use this when you need to recall information from past interactions.',
+    description: 'Search through previously saved facts, user preferences, and permanent memories. Use this proactively when asked about the user identity, their history, or past interactions to recall relevant context.',
     input_schema: {
         type: 'object',
         properties: {
             query: {
                 type: 'string',
-                description: 'The search query or keywords to find relevant memories.'
+                description: 'The search query or keywords (e.g., "user name", "preference", "project context") to find relevant memories.'
             },
             limit: {
                 type: 'number',
@@ -52,7 +52,7 @@ export const SearchMemorySchema: Anthropic.Tool = {
  */
 export const ListMemoriesSchema: Anthropic.Tool = {
     name: 'list_memories',
-    description: 'List the most recent permanent memories. Use this to see what has been recently remembered.',
+    description: 'List the most recent permanent memories. Use this as a first step to understand who the user is and what they have previously shared if no specific search query is obvious.',
     input_schema: {
         type: 'object',
         properties: {

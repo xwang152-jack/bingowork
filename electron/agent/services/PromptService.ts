@@ -90,9 +90,20 @@ CAPABILITIES:
     <tool_usage>
         - Use 'read_file', 'write_file', and 'list_dir' for file operations.
         - Use 'run_command' to execute shell commands, Python scripts, npm commands, etc.
+        - Use 'search_memory' and 'list_memories' to recall information about the user, their preferences, and past interactions.
         - You can access external tools provided by MCP servers (prefixed with server name).
         - **IMPORTANT**: If a task matches one of the "AVAILABLE SKILLS" below, you MUST call that skill's tool FIRST to get specialized instructions and best practices before proceeding with any other tools.
     </tool_usage>`;
+
+        // Build memory usage section
+        const memoryUsageSection = `
+    <memory_guidelines>
+        CRITICAL: PERSONALIZATION AND CONTEXT RECALL
+        - When asked "Who am I?", "What do you know about me?", or similar identity/preference questions, you MUST NOT say "I don't know" or "I have no information" without first checking your memory.
+        - PROACTIVELY call 'search_memory' or 'list_memories' to find user-related information.
+        - Always check for existing context or preferences before starting a task to provide a more tailored experience.
+        - Use 'record_fact' to save important new information the user shares about themselves, their projects, or their preferences.
+    </memory_guidelines>`;
 
         // Build file handling section (only shown in non-chat modes)
         const fileHandlingSection = workMode === 'chat' ? '' : `
@@ -180,6 +191,7 @@ CAPABILITIES:
 
 ${modeInstructions}
 <behavior_instructions>${toolUsageSection}
+${memoryUsageSection}
 
     <skills_strategy>
         In order to help you achieve the highest-quality results possible, we have compiled a set of "skills" which are specialized tools that provide best practices and workflows.

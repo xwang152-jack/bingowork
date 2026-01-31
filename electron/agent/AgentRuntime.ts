@@ -265,15 +265,17 @@ export class AgentRuntime {
 
     public async processUserMessage(input: string | { content: string, images: string[] }) {
         if (this.isProcessing) {
-            throw new Error('Agent is already processing a message');
+            logs.agent.warn('Agent is already processing a message. Ignoring concurrent request.');
+            return;
         }
 
         this.isProcessing = true;
-        this.abortController = new AbortController();
-        this.setStage('THINKING');
-        this.eventSink?.logEvent('user_message', this.summarizeUserInput(input));
 
         try {
+            this.abortController = new AbortController();
+            this.setStage('THINKING');
+            this.eventSink?.logEvent('user_message', this.summarizeUserInput(input));
+
             // Performance optimization: Lazy load skills on first message
             if (!this.skillsLoaded) {
                 logs.agent.info('Loading skills on-demand...');

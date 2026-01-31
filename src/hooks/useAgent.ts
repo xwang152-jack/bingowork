@@ -34,6 +34,8 @@ export function useAgent(): UseAgentResult {
     }, [streamingText]);
 
     useEffect(() => {
+        if (!window.ipcRenderer) return;
+
         const removeListener = window.ipcRenderer.on('agent:history-update', async (_event, updatedHistory) => {
             setHistory(updatedHistory as AgentMessage[]);
             setIsProcessing(false);

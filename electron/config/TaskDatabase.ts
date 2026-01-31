@@ -216,15 +216,70 @@ export class TaskDatabase {
     }
 
     searchMemories(query: string, limit: number = 20): Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> {
-        const stmt = this.db.prepare(`
-            SELECT m.id, m.content, m.tags_json, m.created_at, m.updated_at
-            FROM memories m
-            JOIN memories_fts f ON m.id = f.rowid
-            WHERE memories_fts MATCH @query
-            ORDER BY rank
-            LIMIT @limit
-        `);
-        return stmt.all({ query, limit }) as any;
+        let results: Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> = [];
+        
+        // 1. Try FTS search
+        try {
+            const ftsStmt = this.db.prepare(`
+                SELECT m.id, m.content, m.tags_json, m.created_at, m.updated_at
+                FROM memories m
+                JOIN memories_fts f ON m.id = f.rowid
+                WHERE memories_fts MATCH @query
+                ORDER BY rank
+                LIMIT @limit
+            `);
+            results = ftsStmt.all({ query, limit }) as any;
+        } catch (error) {
+            console.warn('[TaskDatabase] FTS search failed or invalid query, falling back to LIKE', error);
+        }
+
+        // 2. Fallback/Supplement with LIKE search if we haven't reached the limit
+        if (results.length < limit) {
+            // Generate broad keywords including bigrams for better Chinese matching
+            const rawTokens = query.split(/\s+/).filter(k => k.trim().length > 0);
+            const keywordSet = new Set<string>();
+            
+            rawTokens.forEach(token => {
+                keywordSet.add(token);
+                // Generate bigrams for Chinese-like matching
+                if (token.length >= 2) {
+                    for (let i = 0; i < token.length - 1; i++) {
+                        keywordSet.add(token.substring(i, i + 2));
+                    }
+                }
+            });
+            
+            const keywords = Array.from(keywordSet);
+            
+            if (keywords.length > 0) {
+                const existingIds = new Set(results.map(r => r.id));
+                const remainingLimit = limit - results.length;
+                
+                // Build dynamic query: (content LIKE @k0 OR content LIKE @k1 ...)
+                const likeConditions = keywords.map((_, i) => `content LIKE @k${i}`).join(' OR ');
+                const params: Record<string, any> = { limit: remainingLimit };
+                keywords.forEach((k, i) => params[`k${i}`] = `%${k}%`);
+
+                try {
+                    const likeQuery = `
+                        SELECT id, content, tags_json, created_at, updated_at
+                        FROM memories
+                        WHERE (${likeConditions})
+                        ${existingIds.size > 0 ? `AND id NOT IN (${Array.from(existingIds).join(',')})` : ''}
+                        ORDER BY created_at DESC
+                        LIMIT @limit
+                    `;
+                    
+                    const likeStmt = this.db.prepare(likeQuery);
+                    const likeResults = likeStmt.all(params) as any;
+                    results = [...results, ...likeResults];
+                } catch (error) {
+                    console.error('[TaskDatabase] LIKE search failed', error);
+                }
+            }
+        }
+
+        return results;
     }
 
     getRecentMemories(limit: number = 20): Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> {

@@ -37,6 +37,8 @@ export function useAgent(): UseAgentResult {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!window.ipcRenderer) return;
+
         const removeListener = window.ipcRenderer.on('agent:history-update', (_event, updatedHistory) => {
             setHistory(updatedHistory as AgentMessage[]);
             setIsProcessing(false);
@@ -145,6 +147,7 @@ export function useConfig(): UseConfigResult {
     }, [refresh]);
 
     useEffect(() => {
+        if (!window.ipcRenderer) return;
         const remove = window.ipcRenderer.on('config:updated', () => {
             refresh();
         });
@@ -258,6 +261,8 @@ export function useSessions(): UseSessionsResult {
 
     useEffect(() => {
         let timeoutId: number | null = null;
+        if (!window.ipcRenderer) return;
+
         const remove = window.ipcRenderer.on('agent:history-update', () => {
             if (timeoutId) window.clearTimeout(timeoutId);
             timeoutId = window.setTimeout(() => {

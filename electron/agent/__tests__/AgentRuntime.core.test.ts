@@ -282,16 +282,15 @@ describe('AgentRuntime Core Functionality', () => {
       expect(mockWindow.webContents.send).toHaveBeenCalled();
     });
 
-    it('should reject concurrent message processing', async () => {
+    it('should ignore concurrent message processing gracefully', async () => {
       const mockLLMProvider = new MockLLMProvider();
       (runtime as any).llmProvider = mockLLMProvider;
 
-      // Make the first call take longer
+      // Make the first call
       const firstCall = runtime.processUserMessage({ content: 'First message' });
 
-      // Second call should throw
-      await expect(runtime.processUserMessage({ content: 'Second message' }))
-        .rejects.toThrow('Agent is already processing a message');
+      // Second call should resolve immediately (and be ignored) without throwing
+      await expect(runtime.processUserMessage({ content: 'Second message' })).resolves.toBeUndefined();
 
       // Wait for first call to complete
       await firstCall;
