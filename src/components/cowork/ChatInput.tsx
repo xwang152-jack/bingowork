@@ -33,6 +33,7 @@ export function ChatInput({
     onModelChange,
 }: ChatInputProps) {
     const [content, setContent] = useState('');
+    const [isComposing, setIsComposing] = useState(false);
 
     const {
         images,
@@ -62,11 +63,11 @@ export function ChatInput({
 
     // Memoize key down handler
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !isComposing) {
             e.preventDefault();
             handleSend();
         }
-    }, [handleSend]);
+    }, [handleSend, isComposing]);
 
     // Memoize paste handler
     const handlePasteEvent = useCallback(async (e: React.ClipboardEvent) => {
@@ -148,6 +149,8 @@ export function ChatInput({
                         onChange={(e) => setContent(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onPaste={handlePasteEvent}
+                        onCompositionStart={() => setIsComposing(true)}
+                        onCompositionEnd={() => setIsComposing(false)}
                         placeholder={placeholder}
                         disabled={disabled}
                         className="flex-1 h-10 bg-transparent outline-none text-sm text-stone-800 placeholder:text-stone-400 disabled:opacity-50 disabled:cursor-not-allowed"
