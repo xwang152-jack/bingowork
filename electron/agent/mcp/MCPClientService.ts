@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -7,8 +8,9 @@ import os from 'os';
 
 export interface MCPServerConfig {
     name: string;
-    command: string;
-    args: string[];
+    command?: string;       // Optional for stdio transport
+    args?: string[];        // Optional for stdio transport
+    url?: string;           // Optional for SSE/HTTP transport
     env?: Record<string, string>;
 }
 
@@ -108,6 +110,9 @@ export class MCPClientService {
         for (const [key, serverConfig] of Object.entries(config.mcpServers || {})) {
             await this.connectToServer(key, serverConfig);
         }
+
+        // Log summary of connected servers
+        console.log(`[MCP] Successfully connected to ${this.clients.size} server(s):`, Array.from(this.clients.keys()));
     }
 
     private async connectToServer(name: string, config: MCPServerConfig) {
@@ -132,11 +137,25 @@ export class MCPClientService {
                 }
             }
 
-            const transport = new StdioClientTransport({
-                command: config.command,
-                args: config.args || [],
-                env: finalEnv
-            });
+            // Choose transport based on config type
+            let transport;
+            if (config.url) {
+                // Use Streamable HTTP transport for URL-based connections
+                console.log(`Connecting to MCP server ${name} via Streamable HTTP: ${config.url}`);
+                transport = new StreamableHTTPClientTransport(
+                    new URL(config.url)
+                );
+            } else if (config.command) {
+                // Use stdio transport for command-based connections
+                console.log(`Connecting to MCP server ${name} via stdio: ${config.command}`);
+                transport = new StdioClientTransport({
+                    command: config.command,
+                    args: config.args || [],
+                    env: finalEnv
+                });
+            } else {
+                throw new Error(`Invalid MCP server config for ${name}: must provide either 'url' or 'command'`);
+            }
 
             const client = new Client({
                 name: "bingowork-client",
@@ -149,9 +168,11 @@ export class MCPClientService {
 
             await client.connect(transport);
             this.clients.set(name, client);
-            console.log(`Connected to MCP server: ${name}`);
+            console.log(`[MCP] ✓ Connected to server: ${name}`);
         } catch (e) {
-            console.error(`Failed to connect to MCP server ${name}:`, e);
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            console.error(`[MCP] ✗ Failed to connect to server "${name}": ${errorMessage}`);
+            // Continue with other servers even if this one fails
         }
     }
 
