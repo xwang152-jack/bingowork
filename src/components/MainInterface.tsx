@@ -19,6 +19,7 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
         history,
         isProcessing,
         sendMessage,
+        abort,
         streamingText,
     } = useAgent();
 
@@ -76,6 +77,10 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
         await sendMessage(content, images);
     }, [sendMessage]);
 
+    const handleAbort = useCallback(async () => {
+        await abort();
+    }, [abort]);
+
     return (
         <div className="flex h-full w-full bg-[#FAF8F5] overflow-hidden font-sans">
             <LeftSidebar
@@ -116,8 +121,10 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
                 {/* Input Area */}
                 <div ref={chatInputWrapRef} className="animate-fade-in">
                     <ChatInput
-                        onSend={handleSendMessage}
                         disabled={isProcessing}
+                        isProcessing={isProcessing}
+                        onSend={handleSendMessage}
+                        onStop={handleAbort}
                         placeholder={activeTab === 'chat' ? '聊天模式：只对话，不访问本地文件' : activeTab === 'code' ? '代码模式：可读写代码与运行命令' : 'Cowork 模式：可处理任务、文件与报告'}
                         models={modelState?.models}
                         activeModelId={modelState?.activeModelId}

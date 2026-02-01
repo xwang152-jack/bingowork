@@ -4,12 +4,14 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Plus, ArrowUp, X } from 'lucide-react';
+import { Plus, ArrowUp, X, Square } from 'lucide-react';
 import { useImageUpload } from '../../hooks/useImageUpload';
 
 export interface ChatInputProps {
     disabled?: boolean;
+    isProcessing?: boolean;
     onSend: (content: string, images?: string[]) => void;
+    onStop?: () => void;
     placeholder?: string;
     models?: Array<{
         id: string;
@@ -22,7 +24,9 @@ export interface ChatInputProps {
 
 export function ChatInput({
     disabled = false,
+    isProcessing = false,
     onSend,
+    onStop,
     placeholder = '输入消息...',
     models,
     activeModelId,
@@ -164,14 +168,25 @@ export function ChatInput({
                             ))}
                         </select>
                     ) : null}
-                    <button
-                        onClick={handleSend}
-                        disabled={buttonDisabled}
-                        className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#E85D3E] to-[#d14a2e] text-white hover:from-[#d14a2e] hover:to-[#b53d26] disabled:from-stone-200 disabled:to-stone-300 disabled:text-stone-400 disabled:cursor-not-allowed transition-all flex items-center justify-center shrink-0 shadow-sm hover:shadow"
-                        aria-label="发送"
-                    >
-                        <ArrowUp size={18} />
-                    </button>
+                    {isProcessing ? (
+                        <button
+                            onClick={() => onStop?.()}
+                            className="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all flex items-center justify-center shrink-0 shadow-sm hover:shadow animate-pulse"
+                            aria-label="停止"
+                            title="停止生成"
+                        >
+                            <Square size={14} fill="currentColor" />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleSend}
+                            disabled={buttonDisabled}
+                            className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#E85D3E] to-[#d14a2e] text-white hover:from-[#d14a2e] hover:to-[#b53d26] disabled:from-stone-200 disabled:to-stone-300 disabled:text-stone-400 disabled:cursor-not-allowed transition-all flex items-center justify-center shrink-0 shadow-sm hover:shadow"
+                            aria-label="发送"
+                        >
+                            <ArrowUp size={18} />
+                        </button>
+                    )}
                 </div>
             </div>
 

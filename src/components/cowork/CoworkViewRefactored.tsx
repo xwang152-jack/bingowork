@@ -160,7 +160,9 @@ export function CoworkViewRefactored({ onOpenSettings }: CoworkViewRefactoredPro
                     {/* Input */}
                     <ChatInput
                         disabled={isProcessing}
+                        isProcessing={isProcessing}
                         onSend={handleSendMessage}
+                        onStop={handleAbort}
                         placeholder="输入消息... (支持拖拽上传图片)"
                     />
                 </div>
