@@ -117,10 +117,6 @@ export class WindowManager {
       icon: getIconPath(),
     });
 
-    if (viteDevServerUrl) {
-      this.floatingBall.window.webContents.openDevTools({ mode: 'detach' });
-    }
-
     // Load the appropriate URL
     if (viteDevServerUrl) {
       this.floatingBall.window.loadURL(`${viteDevServerUrl}#/floating-ball`);
