@@ -135,6 +135,14 @@ export class AgentRuntime {
         this.model = normalized;
     }
 
+    public getMCPService(): MCPClientService {
+        return this.mcpService;
+    }
+
+    public getToolRegistry(): ToolRegistry {
+        return this.toolRegistry;
+    }
+
     public updateLLMConfig(next: { model?: string; provider?: ApiProvider; apiUrl?: string; apiKey?: string }) {
         const nextModel = typeof next?.model === 'string' ? String(next.model || '').trim() : '';
         if (nextModel) this.model = nextModel;

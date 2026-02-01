@@ -157,17 +157,19 @@ export function SettingsView({ onClose }: SettingsViewProps) {
 
     const saveMcpConfig = async () => {
         try {
+            const configToSave = mcpConfig.trim() || '{}';
             // Validate JSON
-            JSON.parse(mcpConfig);
+            JSON.parse(configToSave);
 
             // Check backend response
-            const result = await window.ipcRenderer.invoke('mcp:save-config', mcpConfig) as {
+            const result = await window.ipcRenderer.invoke('mcp:save-config', configToSave) as {
                 success: boolean;
                 error?: string;
             };
 
             if (result.success) {
                 setMcpSaved(true);
+                setMcpConfig(configToSave); // Update state with trimmed/defaulted config
                 setTimeout(() => setMcpSaved(false), UI_TIMEOUTS.SETTINGS_SAVED);
             } else {
                 // Show specific error from backend

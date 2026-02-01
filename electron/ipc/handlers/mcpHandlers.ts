@@ -9,13 +9,14 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { IPC_CHANNELS } from '../../constants/IpcChannels';
 
+import { AgentRuntime } from '../../agent/AgentRuntime';
+
 const mcpConfigPath = path.join(os.homedir(), '.bingowork', 'mcp.json');
 
-// Note: Agent instance is not currently used but kept for future use
-// let agent: AgentRuntime | null = null;
+let agent: AgentRuntime | null = null;
 
-export function setAgentInstance(_agentInstance: any): void {
-  // agent = agentInstance;
+export function setAgentInstance(agentInstance: AgentRuntime): void {
+  agent = agentInstance;
 }
 
 export function registerMCPHandlers(): void {
@@ -39,8 +40,23 @@ export function registerMCPHandlers(): void {
       }
       await fs.writeFile(mcpConfigPath, content, 'utf-8');
 
-      // Note: MCP service reload could be implemented here
-      console.log('[MCP] Configuration saved');
+      console.log('[MCP] Configuration saved to:', mcpConfigPath);
+
+      // Reload MCP service if agent is available
+      if (agent) {
+        console.log('[MCP] Reloading MCP services...');
+        const mcpService = agent.getMCPService();
+        if (mcpService) {
+          await mcpService.loadClients();
+          
+          // Also need to reload dynamic tools in tool registry
+          const toolRegistry = agent.getToolRegistry();
+          if (toolRegistry) {
+            await toolRegistry.loadDynamicTools();
+          }
+          console.log('[MCP] MCP services reloaded successfully');
+        }
+      }
 
       return { success: true };
     } catch (error) {
