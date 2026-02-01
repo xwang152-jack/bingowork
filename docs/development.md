@@ -1,5 +1,7 @@
 # Development Guide
 
+[简体中文](./development_cn.md)
+
 Welcome to **Bingowork** development! This guide will help you set up your local environment and contribute to the project.
 
 ## Prerequisites

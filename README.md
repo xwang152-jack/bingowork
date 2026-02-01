@@ -2,6 +2,8 @@
   <img src="./public/icon.png" width="120" height="120" alt="Bingowork Logo">
 
   # Bingowork
+  
+  [简体中文](./README_CN.md)
 
   ### 🤖 Open Source Desktop AI Assistant
 

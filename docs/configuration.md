@@ -1,5 +1,7 @@
 # Configuration Guide
 
+[简体中文](./configuration_cn.md)
+
 Bingowork provides flexible configuration options, allowing you to customize API connections, model selection, and other advanced settings.
 
 ## Default Configuration

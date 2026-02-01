@@ -3,6 +3,8 @@
 
   # Bingowork
 
+  [English](./README.md)
+
   ### 🤖 开源桌面级 AI 助手
 
   [![Release](https://img.shields.io/github/v/release/xwang152-jack/bingowork?style=flat-square&color=orange)](https://github.com/xwang152-jack/bingowork/releases)

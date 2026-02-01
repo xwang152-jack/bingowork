@@ -1,5 +1,7 @@
 # 配置指南
 
+[English](./configuration.md)
+
 Bingowork 提供了灵活的配置选项，允许您自定义 API 连接、模型选择以及其他高级设置。
 
 ## 默认配置
