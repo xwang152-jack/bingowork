@@ -21,6 +21,58 @@ export class TaskDatabase {
         this.migrate();
     }
 
+    private normalizeSearchQuery(query: string): string {
+        return String(query || '').trim().toLowerCase();
+    }
+
+    private extractSearchTokens(query: string): string[] {
+        const tokens = query
+            .split(/[\s,，。;；:：、/\\|]+/)
+            .map(token => token.trim())
+            .filter(token => token.length > 0);
+        return Array.from(new Set(tokens));
+    }
+
+    private isSimpleToken(token: string): boolean {
+        return /^[\p{L}\p{N}_]+$/u.test(token);
+    }
+
+    private buildFtsQuery(tokens: string[]): string {
+        if (tokens.length === 0) return '';
+        const clauses: string[] = [];
+        tokens.forEach(token => {
+            if (!token) return;
+            if (this.isSimpleToken(token)) {
+                const suffix = token.length > 1 ? '*' : '';
+                clauses.push(`${token}${suffix}`);
+            } else {
+                const escaped = token.replace(/"/g, '""');
+                clauses.push(`"${escaped}"`);
+            }
+        });
+        return clauses.join(' OR ');
+    }
+
+    private buildLikeKeywords(tokens: string[], fallbackQuery: string): string[] {
+        const keywordSet = new Set<string>();
+        const sources = tokens.length > 0 ? tokens : fallbackQuery ? [fallbackQuery] : [];
+        const maxKeywords = 20;
+
+        for (const token of sources) {
+            if (!token) continue;
+            keywordSet.add(token);
+            if (token.length >= 2) {
+                for (let i = 0; i < token.length - 1; i++) {
+                    if (keywordSet.size >= maxKeywords) break;
+                    keywordSet.add(token.substring(i, i + 2));
+                }
+            }
+            if (keywordSet.size >= maxKeywords) break;
+        }
+
+        return Array.from(keywordSet);
+    }
+
     private migrate() {
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS app_config (
@@ -217,56 +269,47 @@ export class TaskDatabase {
 
     searchMemories(query: string, limit: number = 20): Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> {
         let results: Array<{ id: number; content: string; tags_json: string; created_at: number; updated_at: number }> = [];
-        
+        const normalizedQuery = this.normalizeSearchQuery(query);
+        const tokens = this.extractSearchTokens(normalizedQuery);
+        const ftsQuery = this.buildFtsQuery(tokens) || normalizedQuery;
+
         // 1. Try FTS search
-        try {
-            const ftsStmt = this.db.prepare(`
-                SELECT m.id, m.content, m.tags_json, m.created_at, m.updated_at
-                FROM memories m
-                JOIN memories_fts f ON m.id = f.rowid
-                WHERE memories_fts MATCH @query
-                ORDER BY rank
-                LIMIT @limit
-            `);
-            results = ftsStmt.all({ query, limit }) as any;
-        } catch (error) {
-            console.warn('[TaskDatabase] FTS search failed or invalid query, falling back to LIKE', error);
+        if (ftsQuery) {
+            try {
+                const ftsStmt = this.db.prepare(`
+                    SELECT m.id, m.content, m.tags_json, m.created_at, m.updated_at, bm25(f) AS score
+                    FROM memories m
+                    JOIN memories_fts f ON m.id = f.rowid
+                    WHERE memories_fts MATCH @query
+                    ORDER BY score, m.updated_at DESC
+                    LIMIT @limit
+                `);
+                results = ftsStmt.all({ query: ftsQuery, limit }) as any;
+            } catch (error) {
+                console.warn('[TaskDatabase] FTS search failed or invalid query, falling back to LIKE', error);
+            }
         }
 
         // 2. Fallback/Supplement with LIKE search if we haven't reached the limit
         if (results.length < limit) {
-            // Generate broad keywords including bigrams for better Chinese matching
-            const rawTokens = query.split(/\s+/).filter(k => k.trim().length > 0);
-            const keywordSet = new Set<string>();
-            
-            rawTokens.forEach(token => {
-                keywordSet.add(token);
-                // Generate bigrams for Chinese-like matching
-                if (token.length >= 2) {
-                    for (let i = 0; i < token.length - 1; i++) {
-                        keywordSet.add(token.substring(i, i + 2));
-                    }
-                }
-            });
-            
-            const keywords = Array.from(keywordSet);
+            const keywords = this.buildLikeKeywords(tokens, normalizedQuery);
             
             if (keywords.length > 0) {
                 const existingIds = new Set(results.map(r => r.id));
                 const remainingLimit = limit - results.length;
                 
-                // Build dynamic query: (content LIKE @k0 OR content LIKE @k1 ...)
-                const likeConditions = keywords.map((_, i) => `content LIKE @k${i}`).join(' OR ');
+                const likeConditions = keywords.map((_, i) => `(content LIKE @k${i} OR tags_json LIKE @k${i})`).join(' OR ');
+                const scoreFragments = keywords.map((_, i) => `(content LIKE @k${i}) + (tags_json LIKE @k${i})`).join(' + ');
                 const params: Record<string, any> = { limit: remainingLimit };
                 keywords.forEach((k, i) => params[`k${i}`] = `%${k}%`);
 
                 try {
                     const likeQuery = `
-                        SELECT id, content, tags_json, created_at, updated_at
+                        SELECT id, content, tags_json, created_at, updated_at, (${scoreFragments}) AS score
                         FROM memories
                         WHERE (${likeConditions})
                         ${existingIds.size > 0 ? `AND id NOT IN (${Array.from(existingIds).join(',')})` : ''}
-                        ORDER BY created_at DESC
+                        ORDER BY score DESC, updated_at DESC
                         LIMIT @limit
                     `;
                     

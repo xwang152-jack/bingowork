@@ -159,11 +159,26 @@ export function SettingsView({ onClose }: SettingsViewProps) {
         try {
             // Validate JSON
             JSON.parse(mcpConfig);
-            await window.ipcRenderer.invoke('mcp:save-config', mcpConfig);
-            setMcpSaved(true);
-            setTimeout(() => setMcpSaved(false), UI_TIMEOUTS.SETTINGS_SAVED);
+
+            // Check backend response
+            const result = await window.ipcRenderer.invoke('mcp:save-config', mcpConfig) as {
+                success: boolean;
+                error?: string;
+            };
+
+            if (result.success) {
+                setMcpSaved(true);
+                setTimeout(() => setMcpSaved(false), UI_TIMEOUTS.SETTINGS_SAVED);
+            } else {
+                // Show specific error from backend
+                alert('保存失败: ' + (result.error || '未知错误'));
+            }
         } catch (e) {
-            alert('Invalid JSON configuration');
+            if (e instanceof SyntaxError) {
+                alert('JSON 格式错误: 请检查 JSON 语法');
+            } else {
+                alert('保存失败: ' + (e as Error).message);
+            }
         }
     };
 
