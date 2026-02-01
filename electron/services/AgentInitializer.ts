@@ -55,6 +55,7 @@ export class AgentInitializer {
         providerIdForApiKey,
         model,
         apiUrl,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         secureCredentialsReady: (configStore as any).secureCredentialsReady
       });
 

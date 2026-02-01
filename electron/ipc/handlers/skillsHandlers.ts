@@ -23,6 +23,7 @@ const getBuiltinSkills = (): SkillInfo[] => {
   try {
     let sourceDir = path.join(process.cwd(), 'resources', 'skills');
     if (app.isPackaged) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resourcesPath = (app as any).getPath('resources') || app.getAppPath();
       const possiblePath = path.join(resourcesPath, 'resources', 'skills');
       if (fsSync.existsSync(possiblePath)) sourceDir = possiblePath;
@@ -64,6 +65,7 @@ const isModifiedBuiltinSkill = (skillName: string): boolean => {
   // Try to read the source directory for comparison
   let sourceDir = path.join(process.cwd(), 'resources', 'skills');
   if (app.isPackaged) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resourcesPath = (app as any).getPath('resources') || app.getAppPath();
     const possiblePath = path.join(resourcesPath, 'resources', 'skills');
     if (fsSync.existsSync(possiblePath)) sourceDir = possiblePath;
@@ -143,6 +145,7 @@ export function registerSkillsHandlers(): void {
       // Try built-in skills first
       let sourceDir = path.join(process.cwd(), 'resources', 'skills');
       if (app.isPackaged) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const resourcesPath = (app as any).getPath('resources') || app.getAppPath();
         const possiblePath = path.join(resourcesPath, 'resources', 'skills');
         if (fsSync.existsSync(possiblePath)) sourceDir = possiblePath;

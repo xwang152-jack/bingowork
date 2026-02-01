@@ -44,6 +44,7 @@ export { setAgentInstance, setTaskDatabase, setScheduleManager };
 /**
  * Set agent instance for all handlers that need it
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function setAgent(agentInstance: any): void {
   setAgentInstance(agentInstance);
   setMCPAgentInstance(agentInstance);

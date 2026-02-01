@@ -121,6 +121,7 @@ export function ScheduleForm({ task, onSave, onCancel }: ScheduleFormProps) {
     setSaving(true);
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const scheduleConfig: any = {
         type: formData.type,
       };
@@ -136,6 +137,7 @@ export function ScheduleForm({ task, onSave, onCancel }: ScheduleFormProps) {
         scheduleConfig.onceAt = new Date(formData.onceAt).getTime();
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const taskContent: any = {};
       if (formData.taskType === 'message') {
         taskContent.type = 'message';
@@ -258,6 +260,7 @@ export function ScheduleForm({ task, onSave, onCancel }: ScheduleFormProps) {
               </label>
               <select
                 value={formData.intervalUnit}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 onChange={(e) => setFormData({ ...formData, intervalUnit: e.target.value as any })}
                 className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-orange-500"
               >

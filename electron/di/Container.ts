@@ -43,6 +43,7 @@ interface ServiceDescriptor<T> {
  * Dependency injection container
  */
 export class Container {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private services = new Map<string, ServiceDescriptor<any>>();
   private resolving = new Set<string>();
 

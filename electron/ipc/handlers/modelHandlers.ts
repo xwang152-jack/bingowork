@@ -41,6 +41,7 @@ export function registerModelHandlers(taskDb: TaskDatabase | null): void {
             const apiUrl = active.effectiveBaseUrl;
             const model = active.modelId;
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             configStore.setProvider(transportProvider as any);
             configStore.setApiUrl(apiUrl);
             configStore.setModel(model);
@@ -49,8 +50,10 @@ export function registerModelHandlers(taskDb: TaskDatabase | null): void {
             const agent = getAgentInstance();
             if (agent) {
                 if (apiKey) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     agent.updateLLMConfig({ provider: transportProvider as any, apiUrl, model, apiKey });
                 } else {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     agent.updateLLMConfig({ provider: transportProvider as any, apiUrl, model });
                 }
             }
@@ -89,6 +92,7 @@ export function registerModelHandlers(taskDb: TaskDatabase | null): void {
         const apiUrl = active.effectiveBaseUrl;
         const model = active.modelId;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         configStore.setProvider(transportProvider as any);
         configStore.setApiUrl(apiUrl);
         configStore.setModel(model);
@@ -97,8 +101,10 @@ export function registerModelHandlers(taskDb: TaskDatabase | null): void {
         const agent = getAgentInstance();
         if (agent) {
             if (apiKey) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 agent.updateLLMConfig({ provider: transportProvider as any, apiUrl, model, apiKey });
             } else {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 agent.updateLLMConfig({ provider: transportProvider as any, apiUrl, model });
             }
         }

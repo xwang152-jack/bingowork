@@ -5,11 +5,10 @@
  * Replaces direct singleton usage with container-managed services.
  */
 
-import { app, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import { initializeContainer, getGlobalContainer, Tokens, type ServiceResolver } from './registerServices';
 import type { TaskDatabase } from '../config/TaskDatabase';
 import type { AgentRuntime } from '../agent/AgentRuntime';
-import type { Logger } from '../utils/logger';
 
 /**
  * Application bootstrap state
@@ -47,13 +46,14 @@ export async function bootstrapApplication(
 
   // 1. Initialize DI container
   const container = initializeContainer();
-  const services = container.registerInstance(
+  const _services = container.registerInstance(
     'bootstrap:services',
     new ServiceResolverWrapper(container)
   );
 
   // 2. Initialize core services
   const taskDatabase = container.resolve<TaskDatabase>(Tokens.TaskDatabase);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const logger = container.resolve<any>(Tokens.Logger);
 
   logger.agent.info('[Bootstrap] DI container initialized');
@@ -142,50 +142,62 @@ class ServiceResolverWrapper {
   constructor(private container: ReturnType<typeof getGlobalContainer>) {}
 
   getConfig() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.ConfigStore);
   }
 
   getSessionStore() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.SessionStore);
   }
 
   getTaskDatabase() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.TaskDatabase);
   }
 
   getPermissionManager() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.PermissionManager);
   }
 
   getLogger() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.Logger);
   }
 
   getPerformanceMonitor() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.PerformanceMonitor);
   }
 
   getCacheManager() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.CacheManager);
   }
 
   getSkillManager() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.SkillManager);
   }
 
   getMCPService() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.MCPClientService);
   }
 
   getPromptService() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.PromptService);
   }
 
   getToolRegistry() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.ToolRegistry);
   }
 
   getAgentRuntime() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.container.resolve<any>(Tokens.AgentRuntime);
   }
 }

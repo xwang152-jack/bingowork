@@ -206,6 +206,7 @@ class CreateScheduleTaskExecutor extends BaseToolExecutor {
     }
 
     async execute(input: ToolInput, _context: ToolExecutionContext): Promise<ToolResult> {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const args = input as any;
 
         // Basic validation

@@ -2,12 +2,8 @@ import { useState, useEffect } from 'react';
 import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye, Clock } from 'lucide-react';
 import { SkillEditor } from './SkillEditor';
 import { ModelSettings } from './settings/ModelSettings';
+import { MCPSettings } from './settings/MCPSettings';
 import { ScheduleView } from './schedule/ScheduleView';
-
-// Constants
-const UI_TIMEOUTS = {
-    SETTINGS_SAVED: 2000,
-} as const;
 
 interface SettingsViewProps {
     onClose: () => void;
@@ -62,10 +58,6 @@ export function SettingsView({ onClose }: SettingsViewProps) {
     const [activeTab, setActiveTab] = useState<'api' | 'folders' | 'mcp' | 'skills' | 'schedule' | 'advanced'>('api');
     const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
 
-    // MCP State
-    const [mcpConfig, setMcpConfig] = useState('');
-    const [mcpSaved, setMcpSaved] = useState(false);
-
     // Skills State
     const [skills, setSkills] = useState<SkillInfo[]>([]);
     const [editingSkill, setEditingSkill] = useState<string | null>(null);
@@ -103,9 +95,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'mcp') {
-            window.ipcRenderer.invoke('mcp:get-config').then(cfg => setMcpConfig(cfg as string));
-        } else if (activeTab === 'skills') {
+        if (activeTab === 'skills') {
             refreshSkills();
         } else if (activeTab === 'advanced') {
             loadPermissions();
@@ -153,35 +143,6 @@ export function SettingsView({ onClose }: SettingsViewProps) {
             setSaved(false);
             onClose();
         }, 800);
-    };
-
-    const saveMcpConfig = async () => {
-        try {
-            const configToSave = mcpConfig.trim() || '{}';
-            // Validate JSON
-            JSON.parse(configToSave);
-
-            // Check backend response
-            const result = await window.ipcRenderer.invoke('mcp:save-config', configToSave) as {
-                success: boolean;
-                error?: string;
-            };
-
-            if (result.success) {
-                setMcpSaved(true);
-                setMcpConfig(configToSave); // Update state with trimmed/defaulted config
-                setTimeout(() => setMcpSaved(false), UI_TIMEOUTS.SETTINGS_SAVED);
-            } else {
-                // Show specific error from backend
-                alert('保存失败: ' + (result.error || '未知错误'));
-            }
-        } catch (e) {
-            if (e instanceof SyntaxError) {
-                alert('JSON 格式错误: 请检查 JSON 语法');
-            } else {
-                alert('保存失败: ' + (e as Error).message);
-            }
-        }
     };
 
     const deleteSkill = async (filename: string) => {
@@ -329,29 +290,8 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                         )}
 
                         {activeTab === 'mcp' && (
-                            <div role="tabpanel" id="settings-panel-mcp" aria-labelledby="settings-tab-mcp" className="h-full flex flex-col">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-stone-500">mcp.json 配置</span>
-                                    <button
-                                        type="button"
-                                        onClick={saveMcpConfig}
-                                        className={`text-xs px-2 py-1 rounded transition-colors ${mcpSaved ? 'bg-green-100 text-green-600' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                                            } focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white`}
-                                    >
-                                        {mcpSaved ? '已保存' : '保存配置'}
-                                    </button>
-                                </div>
-                                <textarea
-                                    value={mcpConfig}
-                                    onChange={(e) => setMcpConfig(e.target.value)}
-                                    className="w-full h-[320px] bg-white border border-stone-200 rounded-lg p-3 font-mono text-xs focus:outline-none focus:border-orange-500 resize-none text-stone-700"
-                                    placeholder='{ "mcpServers": { ... } }'
-                                    spellCheck={false}
-                                />
-                                <p className="text-[10px] text-stone-400 mt-2">
-                                    配置将保存在 ~/.bingowork/mcp.json（保留用于向后兼容）。请确保 JSON 格式正确。
-                                </p>
-
+                            <div role="tabpanel" id="settings-panel-mcp" aria-labelledby="settings-tab-mcp" className="h-full">
+                                <MCPSettings />
                             </div>
                         )}
 

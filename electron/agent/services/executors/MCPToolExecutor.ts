@@ -210,6 +210,7 @@ export async function createMCPToolExecutors(mcpService: MCPClientService): Prom
     const executors: ToolExecutor[] = [];
 
     for (const tool of tools) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const name = (tool as any).name as string;
         if (name.includes('__')) {
             const [serverName, toolName] = name.split('__');

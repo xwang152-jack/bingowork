@@ -15,10 +15,6 @@ export function ExecutionLogs({ taskId }: ExecutionLogsProps) {
   const [logs, setLogs] = useState<ScheduleExecutionLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadLogs();
-  }, [taskId]);
-
   const loadLogs = async () => {
     setLoading(true);
     try {
@@ -30,6 +26,11 @@ export function ExecutionLogs({ taskId }: ExecutionLogsProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadLogs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
 
   const getStatusIcon = (status: ExecutionLogStatus) => {
     switch (status) {

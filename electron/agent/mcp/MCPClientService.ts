@@ -6,11 +6,15 @@ import fs from 'fs/promises';
 import os from 'os';
 // app import removed
 
-export interface MCPServerConfig {
+// Import new type definitions
+import type { MCPServerConfig, MCPConfigFile } from './types.js';
+
+/** @deprecated Use MCPServerConfig from './types.ts' instead */
+export interface LegacyMCPServerConfig {
     name: string;
-    command?: string;       // Optional for stdio transport
-    args?: string[];        // Optional for stdio transport
-    url?: string;           // Optional for SSE/HTTP transport
+    command?: string;
+    args?: string[];
+    url?: string;
     env?: Record<string, string>;
 }
 
@@ -207,5 +211,220 @@ export class MCPClientService {
 
         // Convert MCP result to Anthropic ToolResult
         return JSON.stringify(result);
+    }
+
+    // =====================================================
+    // New CRUD Methods for v2 Configuration Format
+    // =====================================================
+
+    /**
+     * List all MCP server configurations
+     */
+    async listServers(): Promise<MCPServerConfig[]> {
+        const config = await this.loadConfigFileV2();
+        return config.servers || [];
+    }
+
+    /**
+     * Get a single server configuration by ID
+     */
+    async getServer(id: string): Promise<MCPServerConfig | null> {
+        const config = await this.loadConfigFileV2();
+        return config.servers.find(s => s.id === id) || null;
+    }
+
+    /**
+     * Add a new MCP server
+     */
+    async addServer(server: MCPServerConfig): Promise<{ success: boolean; error?: string }> {
+        const config = await this.loadConfigFileV2();
+
+        if (config.servers.some(s => s.id === server.id)) {
+            return { success: false, error: `Server ID "${server.id}" already exists` };
+        }
+
+        const validation = this.validateServerConfig(server);
+        if (!validation.ok) {
+            return { success: false, error: validation.error };
+        }
+
+        server.createdAt = Date.now();
+        server.updatedAt = Date.now();
+        config.servers.push(server);
+        await this.saveConfigFileV2(config);
+
+        return { success: true };
+    }
+
+    /**
+     * Update an existing MCP server
+     */
+    async updateServer(id: string, updates: Partial<MCPServerConfig>): Promise<{ success: boolean; error?: string }> {
+        const config = await this.loadConfigFileV2();
+        const index = config.servers.findIndex(s => s.id === id);
+
+        if (index === -1) {
+            return { success: false, error: `Server "${id}" not found` };
+        }
+
+        if (updates.id && updates.id !== id) {
+            if (config.servers.some(s => s.id === updates.id && s.id !== id)) {
+                return { success: false, error: `Server ID "${updates.id}" already exists` };
+            }
+        }
+
+        const mergedServer: MCPServerConfig = {
+            ...config.servers[index],
+            ...updates,
+            id: config.servers[index].id,
+            updatedAt: Date.now()
+        };
+
+        if (updates.transportType || updates.command || updates.url || updates.id) {
+            const validation = this.validateServerConfig(mergedServer);
+            if (!validation.ok) {
+                return { success: false, error: validation.error };
+            }
+        }
+
+        config.servers[index] = mergedServer;
+        await this.saveConfigFileV2(config);
+
+        return { success: true };
+    }
+
+    /**
+     * Delete an MCP server
+     */
+    async deleteServer(id: string): Promise<{ success: boolean; error?: string }> {
+        const config = await this.loadConfigFileV2();
+        const index = config.servers.findIndex(s => s.id === id);
+
+        if (index === -1) {
+            return { success: false, error: `Server "${id}" not found` };
+        }
+
+        await this.disconnectServerById(id);
+        config.servers.splice(index, 1);
+        await this.saveConfigFileV2(config);
+
+        return { success: true };
+    }
+
+    /**
+     * Toggle server enabled state
+     */
+    async toggleServer(id: string, enabled: boolean): Promise<{ success: boolean; error?: string }> {
+        return await this.updateServer(id, { enabled });
+    }
+
+    /**
+     * Validate server configuration
+     */
+    private validateServerConfig(server: MCPServerConfig): { ok: boolean; error?: string } {
+        if (!server.id || !server.id.trim()) {
+            return { ok: false, error: 'Server ID is required' };
+        }
+
+        if (!/^[a-z0-9-]+$/.test(server.id)) {
+            return { ok: false, error: 'Server ID must contain only lowercase letters, numbers, and hyphens' };
+        }
+
+        if (!server.name || !server.name.trim()) {
+            return { ok: false, error: 'Server name is required' };
+        }
+
+        if (server.transportType === 'stdio' && !server.command) {
+            return { ok: false, error: 'Command is required for stdio transport' };
+        }
+
+        if (server.transportType === 'http') {
+            if (!server.url) {
+                return { ok: false, error: 'URL is required for HTTP transport' };
+            }
+            try {
+                new URL(server.url);
+            } catch {
+                return { ok: false, error: 'Invalid URL format' };
+            }
+        }
+
+        return { ok: true };
+    }
+
+    /**
+     * Load v2 configuration file with auto-migration
+     */
+    private async loadConfigFileV2(): Promise<MCPConfigFile> {
+        try {
+            const content = await fs.readFile(this.configPath, 'utf-8');
+            const config = JSON.parse(content);
+
+            if (config.version === 2) {
+                return config as MCPConfigFile;
+            }
+
+            // Migrate from v1
+            return await this.migrateToV2(config);
+        } catch {
+            return { version: 2, servers: [] };
+        }
+    }
+
+    /**
+     * Save v2 configuration file
+     */
+    private async saveConfigFileV2(config: MCPConfigFile): Promise<void> {
+        const dir = path.dirname(this.configPath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(this.configPath, JSON.stringify(config, null, 2), 'utf-8');
+    }
+
+    /**
+     * Migrate from v1 to v2 format
+     */
+    private async migrateToV2(oldConfig: unknown): Promise<MCPConfigFile> {
+        const config = oldConfig as { mcpServers?: Record<string, { command?: string; args?: string[]; url?: string; env?: Record<string, string> }> };
+        if (config.mcpServers) {
+            const servers: MCPServerConfig[] = Object.entries(config.mcpServers).map(
+                ([id, legacyConfig]) => ({
+                    id,
+                    name: id.charAt(0).toUpperCase() + id.slice(1),
+                    description: `${id} MCP server`,
+                    enabled: true,
+                    transportType: legacyConfig.url ? 'http' : 'stdio',
+                    command: legacyConfig.command,
+                    args: legacyConfig.args,
+                    url: legacyConfig.url,
+                    env: legacyConfig.env,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                })
+            );
+
+            const newConfig: MCPConfigFile = { version: 2, servers };
+            await this.saveConfigFileV2(newConfig);
+            console.log('[MCP] Migrated config from v1 to v2 format');
+            return newConfig;
+        }
+
+        return { version: 2, servers: [] };
+    }
+
+    /**
+     * Disconnect a specific server by ID
+     */
+    private async disconnectServerById(id: string): Promise<void> {
+        const client = this.clients.get(id);
+        if (client) {
+            try {
+                const anyClient = client as unknown as { close?: () => unknown; disconnect?: () => unknown };
+                if (typeof anyClient.close === 'function') await anyClient.close();
+                else if (typeof anyClient.disconnect === 'function') await anyClient.disconnect();
+            } catch (e) {
+                console.error(`Failed to disconnect MCP server ${id}:`, e);
+            }
+            this.clients.delete(id);
+        }
     }
 }

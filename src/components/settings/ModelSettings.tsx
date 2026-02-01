@@ -26,6 +26,7 @@ export function ModelSettings() {
             groups[key].push(m);
         });
         return groups;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [state?.models]);
 
     if (loading && !state) {
@@ -139,16 +140,17 @@ export function ModelSettings() {
                             // It's a preset. It should already be there.
                             // If it's not (maybe we want to support multiple instances of same provider?), that's complex.
                             // Assuming we just want to jump to it or ensure it's configured.
-                            // For now, let's assume "Add Provider" is mostly for Custom providers 
+                            // For now, let's assume "Add Provider" is mostly for Custom providers
                             // OR for presets that might not be in the default list (if we hide them).
-                            // But currently we show all. 
-                            
+                            // But currently we show all.
+
                             // If we want to support "Add Custom Provider", we just need the name.
                             await addCustomModel({
                                 providerName: name,
                                 modelId: 'my-model',
                                 displayName: 'My Model',
                                 baseUrl: template.baseUrl,
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 protocol: template.protocol as any
                             });
                         }
@@ -170,6 +172,7 @@ function ProviderCard({
     provider: ProviderConfigDTO;
     models: ModelConfigDTO[];
     onUpdate: (payload: { providerId: string; baseUrl?: string; apiKey?: string }) => Promise<void>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onAddCustomModel: (payload: any) => Promise<void>;
     onDeleteCustomModel: (id: string) => Promise<void>;
 }) {
@@ -349,6 +352,7 @@ function ProviderCard({
     );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function AddModelInline({ provider, onAdd }: { provider: ProviderConfigDTO, onAdd: (p: any) => Promise<void> }) {
     const [isAdding, setIsAdding] = useState(false);
     const [modelId, setModelId] = useState('');

@@ -284,6 +284,7 @@ export class TaskDatabase {
                     ORDER BY score, m.updated_at DESC
                     LIMIT @limit
                 `);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 results = ftsStmt.all({ query: ftsQuery, limit }) as any;
             } catch (error) {
                 console.warn('[TaskDatabase] FTS search failed or invalid query, falling back to LIKE', error);
@@ -300,6 +301,7 @@ export class TaskDatabase {
                 
                 const likeConditions = keywords.map((_, i) => `(content LIKE @k${i} OR tags_json LIKE @k${i})`).join(' OR ');
                 const scoreFragments = keywords.map((_, i) => `(content LIKE @k${i}) + (tags_json LIKE @k${i})`).join(' + ');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const params: Record<string, any> = { limit: remainingLimit };
                 keywords.forEach((k, i) => params[`k${i}`] = `%${k}%`);
 
@@ -312,8 +314,9 @@ export class TaskDatabase {
                         ORDER BY score DESC, updated_at DESC
                         LIMIT @limit
                     `;
-                    
+
                     const likeStmt = this.db.prepare(likeQuery);
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const likeResults = likeStmt.all(params) as any;
                     results = [...results, ...likeResults];
                 } catch (error) {
@@ -332,6 +335,7 @@ export class TaskDatabase {
             ORDER BY created_at DESC
             LIMIT @limit
         `);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return stmt.all({ limit }) as any;
     }
 

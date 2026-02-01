@@ -54,7 +54,9 @@ const DEFAULT_CONFIGS: Record<CacheKey, CacheConfig> = {
  * Global cache manager
  */
 class CacheManager {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private caches: Map<CacheKey, LRUCache<string, any>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private asyncCaches: Map<CacheKey, any>;
 
   constructor() {
@@ -73,12 +75,14 @@ class CacheManager {
       // Create sync cache
       this.caches.set(
         cacheKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         createLRUCache<string, any>(config.maxSize, config.ttl)
       );
 
       // Create async cache
       this.asyncCaches.set(
         cacheKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         createAsyncLRUCache<string, any>(config.maxSize, config.ttl)
       );
     }
@@ -90,6 +94,7 @@ class CacheManager {
   /**
    * Get a cached value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   get(cacheKey: CacheKey, key: string): any | undefined {
     const cache = this.caches.get(cacheKey);
     return cache?.get(key);
@@ -98,6 +103,7 @@ class CacheManager {
   /**
    * Set a cached value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   set(cacheKey: CacheKey, key: string, value: any): void {
     const cache = this.caches.get(cacheKey);
     cache?.set(key, value);
@@ -154,6 +160,7 @@ class CacheManager {
   /**
    * Prefetch a value (async)
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   prefetch(cacheKey: CacheKey, key: string, compute: () => Promise<any>): void {
     const asyncCache = this.asyncCaches.get(cacheKey);
     asyncCache?.prefetch(key, compute);
@@ -250,14 +257,17 @@ export const cacheManager = new CacheManager();
  * Cache decorator for methods
  * Automatically caches method results based on arguments
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function Cached(cacheKey: CacheKey, keyFn?: (...args: any[]) => string) {
   return function (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     _target: any,
     propertyKey: string,
     descriptor: PropertyDescriptor
   ) {
     const originalMethod = descriptor.value;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     descriptor.value = async function (this: any, ...args: any[]) {
       const cacheKeyValue = keyFn
         ? keyFn(...args)

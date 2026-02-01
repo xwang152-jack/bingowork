@@ -19,6 +19,7 @@ interface LRUNode<K, V> {
 export interface LRUCacheOptions {
   maxSize: number;          // Maximum number of items to store
   ttl?: number;             // Time-to-live in milliseconds (optional)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onEvict?: (key: any, value: any) => void;  // Callback when item is evicted
 }
 

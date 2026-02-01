@@ -121,9 +121,10 @@ export class AgentOrchestrator {
 
       // Get tools and system prompt
       const tools = await this.toolRegistry.getTools();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockSkillManager = { getTools: () => [], loadedSkills: new Set() } as any;
       const systemPrompt = this.promptService.buildSystemPrompt(
-        // We need to pass skillManager - for now use empty object
-        { getTools: () => [], loadedSkills: new Set() } as unknown as any,
+        mockSkillManager,
         config.workMode
       );
 
@@ -146,6 +147,7 @@ export class AgentOrchestrator {
 
       if (finalContent.length > 0) {
         const assistantMsg = { role: 'assistant', content: finalContent };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.conversationManager.addMessage(assistantMsg as any);
         this.notifyHistoryUpdate();
 
@@ -259,6 +261,7 @@ export class AgentOrchestrator {
       blocks.push({ type: 'text', text: 'Please analyze this image.' } as Anthropic.TextBlockParam);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return blocks.length > 0 ? (blocks as any) : input.content;
   }
 

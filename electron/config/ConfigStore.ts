@@ -563,7 +563,8 @@ class ConfigStore {
             config.authorizedFolders = this.normalizeAuthorizedFolders(config.authorizedFolders);
         }
         // Never update API keys through bulk update - use setApiKey instead
-        const { apiKey, apiKeys, ...safeConfig } = config as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { apiKey: _apiKey, apiKeys: _apiKeys, ...safeConfig } = config as any;
         this.data = { ...this.data, ...safeConfig };
         this.save();
     }

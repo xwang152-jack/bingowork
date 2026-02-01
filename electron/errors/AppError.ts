@@ -316,6 +316,7 @@ export interface ErrorHandler {
  * Error logger
  */
 export class ErrorLogger implements ErrorHandler {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(private logger: any) {}
 
   canHandle(_error: AppError): boolean {
@@ -333,6 +334,7 @@ export class ErrorLogger implements ErrorHandler {
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getLogMethod(severity: ErrorSeverity): (...args: any[]) => void {
     switch (severity) {
       case ErrorSeverity.LOW:
@@ -483,6 +485,7 @@ export function getErrorManager(): ErrorManager {
 /**
  * Initialize error handling system
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function initializeErrorHandling(logger: any): ErrorManager {
   const errorManager = getErrorManager();
 

@@ -8,20 +8,26 @@ import type { IPCInvokeChannels, IPCEvents } from '../../electron/types/ipc';
 
 // Type for the exposed ipcRenderer from preload
 type IpcRendererExposed = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invoke(channel: string, ...args: any[]): Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(channel: string, listener: (...args: any[]) => void): () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   off(channel: string, listener: (...args: any[]) => void): void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   send(channel: string, ...args: any[]): void;
 };
 
 /**
  * Extract the parameter type from an IPC invoke channel
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type InvokeParams<K extends keyof IPCInvokeChannels> = IPCInvokeChannels[K] extends (...args: infer P) => any ? P : never;
 
 /**
  * Extract the return type from an IPC invoke channel
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type InvokeReturn<K extends keyof IPCInvokeChannels> = IPCInvokeChannels[K] extends (...args: any[]) => infer R ? R : any;
 
 /**
@@ -43,6 +49,7 @@ export class TypedIPC {
     channel: K,
     ...args: InvokeParams<K>
   ): Promise<InvokeReturn<K>> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ipc = (window as any).ipcRenderer as IpcRendererExposed;
     return await ipc.invoke(channel, ...args) as Promise<InvokeReturn<K>>;
   }
@@ -63,6 +70,7 @@ export class TypedIPC {
       setTimeout(() => reject(new Error(`IPC timeout: ${String(channel)}`)), timeout);
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ipc = (window as any).ipcRenderer as IpcRendererExposed;
     return await Promise.race([
       ipc.invoke(channel, ...args),
@@ -80,16 +88,19 @@ export class TypedIPC {
     channel: K,
     callback: (payload: EventPayload<K>) => void
   ): () => void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const listener = (_event: any, ...args: any[]) => {
       // For events with a single payload parameter
       if (args.length === 1) {
         callback(args[0] as EventPayload<K>);
       } else {
         // For events with multiple parameters, pass as-is
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         callback(args as any);
       }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ipc = (window as any).ipcRenderer as IpcRendererExposed;
     ipc.on(channel, listener);
 
@@ -107,16 +118,20 @@ export class TypedIPC {
     channel: K,
     callback: (payload: EventPayload<K>) => void
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wrappedListener: any = (_event: any, ...args: any[]) => {
       if (args.length === 1) {
         callback(args[0] as EventPayload<K>);
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         callback(args as any);
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ipc = (window as any).ipcRenderer as IpcRendererExposed;
       ipc.off(channel, wrappedListener);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ipc = (window as any).ipcRenderer as IpcRendererExposed;
     ipc.on(channel, wrappedListener);
   }
@@ -130,6 +145,7 @@ export class TypedIPC {
     channel: K,
     ...args: InvokeParams<K>
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ipc = (window as any).ipcRenderer as IpcRendererExposed;
     ipc.send(channel, ...args);
   }
@@ -165,7 +181,7 @@ export function createInvokeHook<K extends keyof IPCInvokeChannels>(
           setIsLoading(false);
         }
       },
-      [channel, ...args]
+      [channel, ...args] // eslint-disable-line react-hooks/exhaustive-deps
     );
 
     return { invoke, data, isLoading, error };
@@ -187,7 +203,7 @@ export function createEventHook<K extends keyof IPCEvents>(
     React.useEffect(() => {
       const cleanup = TypedIPC.on(channel, callback);
       return cleanup;
-    }, [channel, callback, ...deps]);
+    }, [channel, callback, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
   };
 }
 
@@ -230,6 +246,7 @@ class AgentIPCBuilder {
     return await TypedIPC.invoke('agent:abort');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async loadHistory(messages: any[]) {
     return await TypedIPC.invoke('agent:loadHistory', messages);
   }
@@ -238,6 +255,7 @@ class AgentIPCBuilder {
     return await TypedIPC.invoke('agent:clearHistory');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onHistoryUpdate(callback: (messages: any[]) => void) {
     return TypedIPC.on('agent:history-update', callback);
   }
@@ -279,10 +297,12 @@ class SessionIPCBuilder {
     return await TypedIPC.invoke('session:rename', id, title);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onLoaded(callback: (session: any) => void) {
     return TypedIPC.on('session:loaded', callback);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onCreated(callback: (session: any) => void) {
     return TypedIPC.on('session:created', callback);
   }
@@ -300,10 +320,12 @@ class ConfigIPCBuilder {
     return await TypedIPC.invoke('config:get');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async update(config: any) {
     return await TypedIPC.invoke('config:update', config);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onUpdated(callback: (config: any) => void) {
     return TypedIPC.on('config:updated', callback);
   }

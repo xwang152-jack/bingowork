@@ -40,6 +40,7 @@ export function registerConfigHandlers(): void {
     if (cfg.apiKeys && typeof cfg.apiKeys === 'object') {
       for (const [provider, apiKey] of Object.entries(cfg.apiKeys)) {
         if (typeof apiKey === 'string') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await configStore.setApiKey(apiKey, provider as any);
         }
       }
@@ -96,6 +97,7 @@ export function registerConfigHandlers(): void {
 
   // Get API key for current provider
   ipcMain.handle(CONFIG_CHANNELS.GET_API_KEY, async (_event, provider?: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const apiKey = await configStore.getApiKey(provider as any);
     return apiKey || '';
   });

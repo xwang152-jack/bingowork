@@ -132,8 +132,16 @@ export const SHORTCUT_CHANNELS = {
  * MCP (Model Context Protocol) IPC channels
  */
 export const MCP_CHANNELS = {
+  // Legacy channels (保留向后兼容)
   GET_CONFIG: 'mcp:get-config',
   SAVE_CONFIG: 'mcp:save-config',
+  // New channels for v2 format
+  LIST_SERVERS: 'mcp:list-servers',
+  ADD_SERVER: 'mcp:add-server',
+  UPDATE_SERVER: 'mcp:update-server',
+  DELETE_SERVER: 'mcp:delete-server',
+  TOGGLE_SERVER: 'mcp:toggle-server',
+  GET_SERVER: 'mcp:get-server',
 } as const;
 
 /**

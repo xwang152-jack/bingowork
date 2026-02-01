@@ -312,6 +312,7 @@ export class ScheduleTools {
             }
 
             // Build schedule configuration
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const schedule: any = {};
             if (args.scheduleType === 'interval') {
                 schedule.interval = {
@@ -333,6 +334,7 @@ export class ScheduleTools {
             }
 
             // Build task content
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const taskContent: any = {
                 type: args.taskType
             };

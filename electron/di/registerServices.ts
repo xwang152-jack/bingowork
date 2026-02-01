@@ -5,7 +5,7 @@
  * This replaces global singletons with properly managed dependencies.
  */
 
-import { Container, Lifetime, Tokens, getGlobalContainer } from './Container';
+import { Container, Tokens, getGlobalContainer } from './Container';
 import { configStore } from '../config/ConfigStore';
 import { SessionStore } from '../config/SessionStore';
 import { TaskDatabase } from '../config/TaskDatabase';
@@ -133,11 +133,11 @@ export function registerCoreServices(container: Container = getGlobalContainer()
   // Instead, we provide a factory function
   container.registerTransient(
     Tokens.AgentRuntime,
-    (container) => {
-      const apiKey = configStore.get('apiKey') || '';
-      const model = configStore.get('model') || 'claude-3-5-sonnet-20241022';
-      const apiUrl = configStore.get('apiUrl') || 'https://api.anthropic.com';
-      const provider = configStore.get('provider') || 'anthropic';
+    (_container) => {
+      const _apiKey = configStore.get('apiKey') || '';
+      const _model = configStore.get('model') || 'claude-3-5-sonnet-20241022';
+      const _apiUrl = configStore.get('apiUrl') || 'https://api.anthropic.com';
+      const _provider = configStore.get('provider') || 'anthropic';
 
       // AgentRuntime requires BrowserWindow which is passed separately
       throw new Error(

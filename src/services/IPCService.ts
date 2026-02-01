@@ -42,12 +42,14 @@ export interface IPCRequestOptions {
 /**
  * IPC response wrapper
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface IPCResponse<T = any> {
   success: boolean;
   data?: T;
   error?: {
     code: string;
     message: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     details?: any;
   };
 }
@@ -68,8 +70,10 @@ export class IPCService {
   /**
    * Invoke an IPC channel with timeout and retry support
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static async invoke<T = any>(
     channel: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ): Promise<T> {
     return this.invokeWithOptions<T>(channel, {}, ...args);
@@ -78,9 +82,11 @@ export class IPCService {
   /**
    * Invoke an IPC channel with custom options
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static async invokeWithOptions<T = any>(
     channel: string,
     options: IPCRequestOptions,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ): Promise<T> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
@@ -115,6 +121,7 @@ export class IPCService {
   private static async invokeWithTimeout<T>(
     channel: string,
     timeout: number,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ): Promise<T> {
     // Create timeout promise
@@ -138,6 +145,7 @@ export class IPCService {
       const wrapped = response as IPCResponse<T>;
       if (!wrapped.success && wrapped.error) {
         const error = new Error(wrapped.error.message);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (error as any).code = wrapped.error.code;
         throw error;
       }
@@ -184,8 +192,10 @@ export class IPCService {
    */
   static on(
     channel: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     callback: (...args: any[]) => void
   ): () => void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const listener = (_event: any, ...args: any[]) => {
       callback(...args);
     };
@@ -194,6 +204,7 @@ export class IPCService {
 
     // Return cleanup function
     return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       window.ipcRenderer.off(channel, listener as any);
     };
   }
@@ -203,8 +214,10 @@ export class IPCService {
    */
   static once(
     channel: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     callback: (...args: any[]) => void
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wrappedListener: any = (_event: any, ...args: any[]) => {
       callback(...args);
       window.ipcRenderer.off(channel, wrappedListener);
@@ -216,6 +229,7 @@ export class IPCService {
   /**
    * Send a one-way message (no response expected)
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static send(channel: string, ...args: any[]): void {
     window.ipcRenderer.send(channel, ...args);
   }

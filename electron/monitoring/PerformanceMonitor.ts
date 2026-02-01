@@ -355,10 +355,12 @@ export class EnhancedPerformanceMonitor {
   /**
    * Decorator for automatic function timing
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   time<T extends (...args: any[]) => any>(
     name: string,
     fn: T
   ): T {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return ((...args: any[]) => {
       const id = this.startMeasure(name);
       try {

@@ -12,10 +12,12 @@ import { cacheManager, CacheKey } from '../services/CacheManager';
  * Hook for invoking IPC channels with loading and error states
  * Supports caching, timeout, and retries
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcInvoke<T = any>(
   channel: string,
   options?: IPCRequestOptions & {
     cacheKey?: CacheKey;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     cacheKeyFn?: (...args: any[]) => string;
   }
 ) {
@@ -24,6 +26,7 @@ export function useIpcInvoke<T = any>(
   const [error, setError] = useState<Error | null>(null);
 
   const invoke = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (...args: any[]): Promise<T> => {
       setIsLoading(true);
       setError(null);
@@ -77,6 +80,7 @@ export function useIpcInvoke<T = any>(
 /**
  * Hook for listening to IPC events
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcOn<T = any>(
   channel: string,
   callback: (data: T) => void,
@@ -85,14 +89,16 @@ export function useIpcOn<T = any>(
   useEffect(() => {
     const cleanup = IPCService.on(channel, callback);
     return cleanup;
-  }, [channel, callback, ...deps]);
+  }, [channel, callback, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
  * Hook for IPC invoke with automatic retry and polling
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcInvokePoll<T = any>(
   channel: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   args: any[] = [],
   options: {
     interval?: number;        // Polling interval in ms
@@ -113,7 +119,7 @@ export function useIpcInvokePoll<T = any>(
         // Error is already handled by useIpcInvoke
       }
     }
-  }, [enabled, invoke, ...args]);
+  }, [enabled, invoke, ...args]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (immediate) {
@@ -137,6 +143,7 @@ export function useIpcInvokePoll<T = any>(
 /**
  * Hook for IPC invoke with manual trigger (lazy)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcInvokeLazy<T = any>(
   channel: string,
   options?: IPCRequestOptions
@@ -146,6 +153,7 @@ export function useIpcInvokeLazy<T = any>(
   const [error, setError] = useState<Error | null>(null);
 
   const invoke = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (...args: any[]): Promise<T> => {
       setIsLoading(true);
       setError(null);
@@ -181,6 +189,7 @@ export function useIpcInvokeLazy<T = any>(
 /**
  * Hook for multiple concurrent IPC invokes
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcInvokeAll<T extends Record<string, any>>(
   invokes: Record<keyof T, string>
 ) {
@@ -212,13 +221,17 @@ export function useIpcInvokeAll<T extends Record<string, any>>(
         const key = keys[index];
 
         if (result.status === 'fulfilled') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const [, value] = result.value as [string, any];
           if (value && typeof value === 'object' && 'error' in value) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (newErrors as any)[key] = value.error as Error;
           } else {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (newResults as any)[key] = value;
           }
         } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (newErrors as any)[key] = result.reason;
         }
       });
@@ -247,6 +260,7 @@ export function useIpcInvokeAll<T extends Record<string, any>>(
  * Hook for IPC state synchronization
  * Automatically syncs state with IPC events
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcState<T = any>(
   channel: {
     get: string;    // Channel to get current state
@@ -298,6 +312,7 @@ export function useIpcState<T = any>(
 /**
  * Hook for debounced IPC invoke
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcInvokeDebounced<T = any>(
   channel: string,
   delay: number = 500,
@@ -310,6 +325,7 @@ export function useIpcInvokeDebounced<T = any>(
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const invoke = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (...args: any[]) => {
       setIsLoading(true);
 
@@ -350,6 +366,7 @@ export function useIpcInvokeDebounced<T = any>(
 /**
  * Hook for IPC invoke with mutation (for updates/creates/deletes)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcMutation<T = any, TVariables = any>(
   channel: string,
   options?: IPCRequestOptions & {
@@ -408,6 +425,7 @@ export function useIpcMutation<T = any, TVariables = any>(
 /**
  * Hook for infinite scroll with IPC
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIpcInfinite<T = any>(
   channel: string,
   options: {

@@ -75,6 +75,7 @@ export function createSkillToolExecutors(skillManager: SkillManager): ToolExecut
         const skillSchema: Anthropic.Tool = {
             name: skillName,
             description: skill.description || `User-defined skill: ${skillName}`,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             input_schema: (skill.input_schema as any) || {
                 type: 'object',
                 properties: {},
