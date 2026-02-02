@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye, Clock } from 'lucide-react';
+import { X, Settings, FolderOpen, Server, Check, Plus, Trash2, Edit2, Zap, Eye, Clock, Download } from 'lucide-react';
 import { SkillEditor } from './SkillEditor';
 import { ModelSettings } from './settings/ModelSettings';
 import { MCPSettings } from './settings/MCPSettings';
 import { ScheduleView } from './schedule/ScheduleView';
+import { UpdateDialog } from './UpdateDialog';
 
 interface SettingsViewProps {
     onClose: () => void;
@@ -55,7 +56,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
         shortcut: 'Alt+Space'
     });
     const [saved, setSaved] = useState(false);
-    const [activeTab, setActiveTab] = useState<'api' | 'folders' | 'mcp' | 'skills' | 'schedule' | 'advanced'>('api');
+    const [activeTab, setActiveTab] = useState<'api' | 'folders' | 'mcp' | 'skills' | 'schedule' | 'advanced' | 'about'>('api');
     const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
 
     // Skills State
@@ -66,6 +67,9 @@ export function SettingsView({ onClose }: SettingsViewProps) {
 
     // Permissions State
     const [permissions, setPermissions] = useState<ToolPermission[]>([]);
+
+    // Update State
+    const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
     const loadPermissions = () => {
         window.ipcRenderer.invoke('permissions:list').then(list => setPermissions(list as ToolPermission[]));
@@ -204,6 +208,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                         { id: 'skills' as const, label: 'Skills', icon: <Zap size={14} /> },
                         { id: 'schedule' as const, label: '定时任务', icon: <Clock size={14} /> },
                         { id: 'advanced' as const, label: '高级', icon: <Settings size={14} /> },
+                        { id: 'about' as const, label: '关于', icon: <Settings size={14} /> },
                     ].map(tab => (
                         <button
                             type="button"
@@ -484,6 +489,59 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                                 </div>
                             </div>
                         )}
+
+                        {activeTab === 'about' && (
+                            <div
+                                role="tabpanel"
+                                id="settings-panel-about"
+                                aria-labelledby="settings-tab-about"
+                                className="space-y-5"
+                            >
+                                <div className="text-center py-8">
+                                    <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[#E85D3E] to-[#d14a2e] flex items-center justify-center mb-4">
+                                        <Zap className="text-white" size={40} />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-stone-800">Bingowork</h3>
+                                    <p className="text-sm text-stone-500 mt-1">你的数字同事</p>
+                                    <p className="text-xs text-stone-400 mt-2">版本 1.0.8</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowUpdateDialog(true)}
+                                        className="w-full py-3 bg-gradient-to-r from-[#E85D3E] to-[#d14a2e] text-white rounded-xl font-medium hover:from-[#d14a2e] hover:to-[#b53d26] transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D3E]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white flex items-center justify-center gap-2"
+                                    >
+                                        <Download size={18} />
+                                        检查更新
+                                    </button>
+
+                                    <a
+                                        href="https://github.com/xwang152-jack/bingowork"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block w-full py-3 border border-stone-200 text-stone-700 rounded-xl font-medium hover:bg-stone-50 transition-all text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-400/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                    >
+                                        GitHub 仓库
+                                    </a>
+
+                                    <a
+                                        href="https://github.com/xwang152-jack/bingowork/issues"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block w-full py-3 border border-stone-200 text-stone-700 rounded-xl font-medium hover:bg-stone-50 transition-all text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-400/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                                    >
+                                        反馈问题
+                                    </a>
+                                </div>
+
+                                <div className="text-center pt-4 border-t border-stone-200">
+                                    <p className="text-xs text-stone-400">
+                                        © 2024 Bingowork. 基于 Apache 2.0 许可开源
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -499,6 +557,11 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                     }}
                     onSave={refreshSkills}
                 />
+            )}
+
+            {/* Update Dialog */}
+            {showUpdateDialog && (
+                <UpdateDialog onClose={() => setShowUpdateDialog(false)} />
             )}
         </div>
     );

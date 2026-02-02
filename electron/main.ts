@@ -18,7 +18,7 @@ import { getShortcutManager } from './services/ShortcutManager';
 import { getAgentInitializer } from './services/AgentInitializer';
 
 // IPC Handlers
-import { registerAllIPCHandlers, setAgentInstance, setMainWindow, setTaskDatabase, setScheduleManager } from './ipc/handlers';
+import { registerAllIPCHandlers, setAgentInstance, setMainWindow, setTaskDatabase, setScheduleManager, setUpdateMainWindow, checkForUpdatesOnStartup } from './ipc/handlers';
 
 // Schedule Manager
 import { getScheduleManager, initializeScheduleManager } from './agent/schedule/ScheduleManager';
@@ -113,6 +113,7 @@ app.whenReady().then(async () => {
     // 7. Set instances for IPC handlers (do this early so IPC is available)
     setTaskDatabase(taskDb);
     setMainWindow(mainWindow);
+    setUpdateMainWindow(mainWindow);
 
     // 7.5. Initialize ScheduleManager
     if (taskDb) {
@@ -164,6 +165,9 @@ app.whenReady().then(async () => {
           await scheduleManager.start();
           console.log('[ScheduleManager] Started');
         }
+
+        // Check for updates on startup (only in production)
+        checkForUpdatesOnStartup();
 
         // Notify renderer that agent is ready
         mainWindow?.webContents.send('agent:ready');

@@ -19,6 +19,7 @@ export default defineConfig({
             rollupOptions: {
               external: [
                 'electron',
+                'electron-updater',
                 'sqlite3',
                 'sequelize',
                 'better-sqlite3',
@@ -40,6 +41,7 @@ export default defineConfig({
             rollupOptions: {
               external: [
                 'electron',
+                'electron-updater',
                 'sqlite3',
                 'sequelize',
                 'better-sqlite3',

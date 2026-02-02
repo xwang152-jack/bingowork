@@ -185,6 +185,23 @@ export const SCHEDULE_CHANNELS = {
 } as const;
 
 /**
+ * Auto-update management IPC channels
+ */
+export const UPDATE_CHANNELS = {
+  // Commands
+  CHECK: 'update:check',
+  DOWNLOAD: 'update:download',
+  INSTALL: 'update:install',
+  // Events (from main to renderer)
+  CHECKING: 'update:checking',
+  AVAILABLE: 'update:available',
+  NOT_AVAILABLE: 'update:not-available',
+  DOWNLOAD_PROGRESS: 'update:download-progress',
+  DOWNLOADED: 'update:downloaded',
+  ERROR: 'update:error',
+} as const;
+
+/**
  * All IPC channels grouped by category
  */
 export const IPC_CHANNELS = {
@@ -202,6 +219,7 @@ export const IPC_CHANNELS = {
   SKILLS: SKILLS_CHANNELS,
   TODO: TODO_CHANNELS,
   SCHEDULE: SCHEDULE_CHANNELS,
+  UPDATE: UPDATE_CHANNELS,
 } as const;
 
 /**
@@ -221,7 +239,8 @@ export type IpcChannel =
   | (typeof MCP_CHANNELS)[keyof typeof MCP_CHANNELS]
   | (typeof SKILLS_CHANNELS)[keyof typeof SKILLS_CHANNELS]
   | (typeof TODO_CHANNELS)[keyof typeof TODO_CHANNELS]
-  | (typeof SCHEDULE_CHANNELS)[keyof typeof SCHEDULE_CHANNELS];
+  | (typeof SCHEDULE_CHANNELS)[keyof typeof SCHEDULE_CHANNELS]
+  | (typeof UPDATE_CHANNELS)[keyof typeof UPDATE_CHANNELS];
 
 /**
  * Event-only channels (main → renderer, one-way communication)
@@ -247,6 +266,12 @@ export const EVENT_CHANNELS = {
   [SCHEDULE_CHANNELS.TASK_DELETED]: true,
   [SCHEDULE_CHANNELS.TASK_EXECUTED]: true,
   [SCHEDULE_CHANNELS.TASK_FAILED]: true,
+  [UPDATE_CHANNELS.CHECKING]: true,
+  [UPDATE_CHANNELS.AVAILABLE]: true,
+  [UPDATE_CHANNELS.NOT_AVAILABLE]: true,
+  [UPDATE_CHANNELS.DOWNLOAD_PROGRESS]: true,
+  [UPDATE_CHANNELS.DOWNLOADED]: true,
+  [UPDATE_CHANNELS.ERROR]: true,
 } as const;
 
 /**

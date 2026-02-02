@@ -35,6 +35,8 @@ export interface AppConfig {
     shortcut: string;
     allowedPermissions: ToolPermission[];
     workMode: WorkMode;
+    autoUpdateEnabled?: boolean;
+    lastUpdateCheck?: number;
 }
 
 const defaults: AppConfig = {
