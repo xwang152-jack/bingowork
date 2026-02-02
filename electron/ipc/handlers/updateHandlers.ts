@@ -21,16 +21,14 @@ export function setUpdateMainWindow(_window: BrowserWindow | null): void {
  * Configure autoUpdater settings
  */
 function configureAutoUpdater(): void {
-  // Set feed URL to GitHub Releases
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'xwang152-jack',
-    repo: 'bingowork',
-  });
-
   // Configure autoUpdater settings
   autoUpdater.autoDownload = false; // Don't auto-download, let user confirm
   autoUpdater.autoInstallOnAppQuit = false; // We'll handle install manually
+  autoUpdater.logger = require('electron-log');
+
+  console.log('[Update] AutoUpdater configured');
+  console.log('[Update] App version:', app.getVersion());
+  console.log('[Update] isPackaged:', app.isPackaged);
 }
 
 /**
@@ -56,10 +54,15 @@ export function registerUpdateHandlers(): void {
 
   // Check for updates
   ipcMain.handle(UPDATE_CHANNELS.CHECK, async () => {
+    console.log('[Update] IPC: update:check called');
     try {
+      console.log('[Update] Sending checking event to renderer');
       notifyAllWindows(UPDATE_CHANNELS.CHECKING);
-      await autoUpdater.checkForUpdates();
-      return { success: true };
+
+      console.log('[Update] Calling autoUpdater.checkForUpdates()');
+      const result = await autoUpdater.checkForUpdates();
+      console.log('[Update] checkForUpdates completed:', result);
+      return { success: true, result };
     } catch (error) {
       console.error('[Update] Check for updates failed:', error);
       notifyAllWindows(UPDATE_CHANNELS.ERROR, {
@@ -101,15 +104,17 @@ export function registerUpdateHandlers(): void {
  * Set up autoUpdater event listeners
  */
 function setupAutoUpdaterEvents(): void {
+  console.log('[Update] Setting up event listeners');
+
   // When checking for updates
   autoUpdater.on('checking-for-update', () => {
-    console.log('[Update] Checking for updates...');
+    console.log('[Update] Event: checking-for-update');
     notifyAllWindows(UPDATE_CHANNELS.CHECKING);
   });
 
   // When update is available
   autoUpdater.on('update-available', (info) => {
-    console.log('[Update] Update available:', info);
+    console.log('[Update] Event: update-available', info);
     notifyAllWindows(UPDATE_CHANNELS.AVAILABLE, {
       version: info.version,
       releaseDate: info.releaseDate,
@@ -119,7 +124,7 @@ function setupAutoUpdaterEvents(): void {
 
   // When no update is available
   autoUpdater.on('update-not-available', (info) => {
-    console.log('[Update] No update available:', info);
+    console.log('[Update] Event: update-not-available', info);
     notifyAllWindows(UPDATE_CHANNELS.NOT_AVAILABLE, {
       version: info.version,
     });
@@ -127,7 +132,7 @@ function setupAutoUpdaterEvents(): void {
 
   // Download progress
   autoUpdater.on('download-progress', (progress) => {
-    console.log('[Update] Download progress:', progress);
+    console.log('[Update] Event: download-progress', progress);
     notifyAllWindows(UPDATE_CHANNELS.DOWNLOAD_PROGRESS, {
       percent: progress.percent,
       transferred: progress.transferred,
@@ -138,7 +143,7 @@ function setupAutoUpdaterEvents(): void {
 
   // Update downloaded
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('[Update] Update downloaded:', info);
+    console.log('[Update] Event: update-downloaded', info);
     notifyAllWindows(UPDATE_CHANNELS.DOWNLOADED, {
       version: info.version,
       releaseDate: info.releaseDate,
@@ -148,9 +153,10 @@ function setupAutoUpdaterEvents(): void {
 
   // Update error
   autoUpdater.on('error', (error) => {
-    console.error('[Update] Error:', error);
+    console.error('[Update] Event: error', error);
     notifyAllWindows(UPDATE_CHANNELS.ERROR, {
       message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
   });
 }

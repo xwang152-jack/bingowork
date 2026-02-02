@@ -34,40 +34,49 @@ export function UpdateDialog({ onClose }: UpdateDialogProps) {
   }, []);
 
   useEffect(() => {
+    console.log('[UpdateDialog] Setting up event listeners');
+
     // Listen for update events
     const cleanupChecking = window.ipcRenderer.on('update:checking', () => {
+      console.log('[UpdateDialog] Event: checking');
       setStatus('checking');
     });
 
     const cleanupAvailable = window.ipcRenderer.on('update:available', (_event: unknown, ...args: unknown[]) => {
+      console.log('[UpdateDialog] Event: available', args);
       setStatus('available');
       const info = args[0] as UpdateInfo;
       setUpdateInfo(info);
     });
 
-    const cleanupNotAvailable = window.ipcRenderer.on('update:not-available', () => {
+    const cleanupNotAvailable = window.ipcRenderer.on('update:not-available', (_event: unknown, ...args: unknown[]) => {
+      console.log('[UpdateDialog] Event: not-available', args);
       setStatus('not-available');
     });
 
     const cleanupDownloadProgress = window.ipcRenderer.on('update:download-progress', (_event: unknown, ...args: unknown[]) => {
+      console.log('[UpdateDialog] Event: download-progress', args);
       setStatus('downloading');
       const progress = args[0] as { percent: number };
       setDownloadProgress(Math.round(progress.percent));
     });
 
     const cleanupDownloaded = window.ipcRenderer.on('update:downloaded', (_event: unknown, ...args: unknown[]) => {
+      console.log('[UpdateDialog] Event: downloaded', args);
       setStatus('downloaded');
       const info = args[0] as UpdateInfo;
       setUpdateInfo(info);
     });
 
     const cleanupError = window.ipcRenderer.on('update:error', (_event: unknown, ...args: unknown[]) => {
+      console.log('[UpdateDialog] Event: error', args);
       setStatus('error');
       const error = args[0] as { message: string };
       setErrorMessage(error.message);
     });
 
     return () => {
+      console.log('[UpdateDialog] Cleaning up event listeners');
       cleanupChecking();
       cleanupAvailable();
       cleanupNotAvailable();
@@ -78,9 +87,17 @@ export function UpdateDialog({ onClose }: UpdateDialogProps) {
   }, []);
 
   const checkForUpdates = async () => {
+    console.log('[UpdateDialog] checkForUpdates called');
     setStatus('checking');
     setErrorMessage('');
-    await window.ipcRenderer.invoke('update:check');
+    try {
+      const result = await window.ipcRenderer.invoke('update:check');
+      console.log('[UpdateDialog] checkForUpdates result:', result);
+    } catch (error) {
+      console.error('[UpdateDialog] checkForUpdates error:', error);
+      setStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const downloadUpdate = async () => {
