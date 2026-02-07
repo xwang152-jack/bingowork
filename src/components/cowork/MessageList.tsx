@@ -7,7 +7,6 @@ import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { User, Bot } from 'lucide-react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { CollapsibleToolBlock } from '../CollapsibleToolBlock';
-import Anthropic from '@anthropic-ai/sdk';
 import { AgentMessage } from '../../../electron/types/ipc';
 
 export interface MessageListProps {
@@ -58,9 +57,10 @@ export function MessageList({ messages, isDark = false, streamingText = '' }: Me
         shouldStickToBottomRef.current = distanceToBottom < 120;
     }, []);
 
-    // Memoize filtered messages to avoid unnecessary re-renders
+    // Memoize filtered and grouped messages to avoid unnecessary re-renders
     const visibleMessages = useMemo(() => {
-        return messages.filter((m) => {
+        // First filter out hidden messages (like pure tool results)
+        const filtered = messages.filter((m) => {
             if (m.role !== 'user') return true;
             if (!Array.isArray(m.content)) return true;
             const arr = m.content as unknown[];
@@ -71,6 +71,33 @@ export function MessageList({ messages, isDark = false, streamingText = '' }: Me
             });
             return !allToolResults;
         });
+
+        // Then merge consecutive AI messages
+        const merged: AgentMessage[] = [];
+        for (const msg of filtered) {
+            const last = merged[merged.length - 1];
+
+            // If both current and last are AI (assistant/bot), merge them
+            if (last && last.role !== 'user' && msg.role !== 'user') {
+                const lastContent = Array.isArray(last.content)
+                    ? last.content
+                    : (last.content ? [{ type: 'text' as const, text: String(last.content) }] : []);
+
+                const msgContent = Array.isArray(msg.content)
+                    ? msg.content
+                    : (msg.content ? [{ type: 'text' as const, text: String(msg.content) }] : []);
+
+                // Create a new merged message
+                merged[merged.length - 1] = {
+                    ...last,
+                    content: [...lastContent, ...msgContent]
+                };
+            } else {
+                merged.push(msg);
+            }
+        }
+
+        return merged;
     }, [messages]);
 
     useEffect(() => {
@@ -177,33 +204,28 @@ const areMessageEqual = (prevProps: MessageItemProps, nextProps: MessageItemProp
 };
 
 const MessageItem = memo(function MessageItem({ message, isDark, toolResultById, toolStreamById, toolStatusById }: MessageItemProps) {
-    // Memoize message content parsing to avoid re-computation
-    const { isUser, text, toolUses, images } = useMemo(() => {
-        const isUser = message.role === 'user';
-        const contentArray = Array.isArray(message.content) ? message.content : [];
-        const text = typeof message.content === 'string'
-            ? message.content
-            : (contentArray.find((b): b is Anthropic.TextBlockParam => 'type' in b && b.type === 'text')?.text || '');
-        const toolUses = contentArray.filter((b): b is Anthropic.ToolUseBlockParam => 'type' in b && b.type === 'tool_use');
-        const images = contentArray.filter((b): b is Anthropic.ImageBlockParam => 'type' in b && b.type === 'image');
+    const isUser = message.role === 'user';
 
-        return { isUser, text, toolUses, images };
-    }, [message]);
+    // Normalize content to array format for consistent rendering
+    const contentBlocks = useMemo(() => {
+        if (typeof message.content === 'string') {
+            return [{ type: 'text' as const, text: message.content }];
+        }
+        return Array.isArray(message.content) ? message.content : [];
+    }, [message.content]);
 
     // Memoize avatar class
     const avatarClass = useMemo(() => {
-        return `flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${
-            isUser ? 'bg-[#E85D3E] text-white' : 'bg-stone-100 text-stone-600'
-        }`;
+        return `flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${isUser ? 'bg-[#E85D3E] text-white' : 'bg-stone-100 text-stone-600'
+            }`;
     }, [isUser]);
 
     // Memoize content wrapper class
     const contentWrapperClass = useMemo(() => {
-        return `${
-            isUser
-                ? 'bg-stone-50 text-stone-800 rounded-2xl rounded-tr-sm border border-stone-100 shadow-sm'
-                : 'bg-white text-stone-800 rounded-2xl rounded-tl-sm border border-stone-100 shadow-sm'
-        } px-5 py-3.5`;
+        return `${isUser
+            ? 'bg-stone-50 text-stone-800 rounded-2xl rounded-tr-sm border border-stone-100 shadow-sm'
+            : 'bg-white text-stone-800 rounded-2xl rounded-tl-sm border border-stone-100 shadow-sm'
+            } px-5 py-3.5`;
     }, [isUser]);
 
     return (
@@ -216,51 +238,57 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
             {/* Content */}
             <div className={`flex-1 max-w-[85%] ${isUser ? 'text-right' : ''}`}>
                 <div className={contentWrapperClass}>
-                    {/* Text Content */}
-                    {text && (
-                        <div className="prose prose-sm max-w-none text-stone-700 prose-p:my-0 prose-p:leading-6">
-                            <MarkdownRenderer content={text} isDark={isDark} />
-                        </div>
-                    )}
+                    <div className="space-y-3">
+                        {contentBlocks.map((block, index) => {
+                            if (!block || typeof block !== 'object') return null;
 
-                    {/* Images */}
-                    {images.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {images.map((img, index) => {
-                                const source = (img.source && typeof img.source === 'object')
-                                    ? (img.source as unknown as { media_type?: unknown; data?: unknown })
+                            // Text Block
+                            if ('type' in block && block.type === 'text') {
+                                return (
+                                    <div key={index} className="prose prose-sm max-w-none text-stone-700 prose-p:my-0 prose-p:leading-6">
+                                        <MarkdownRenderer content={block.text} isDark={isDark} />
+                                    </div>
+                                );
+                            }
+
+                            // Image Block
+                            if ('type' in block && block.type === 'image') {
+                                const source = (block.source && typeof block.source === 'object')
+                                    ? (block.source as unknown as { media_type?: unknown; data?: unknown })
                                     : undefined;
                                 const mediaType = typeof source?.media_type === 'string' ? source.media_type : '';
                                 const data = typeof source?.data === 'string' ? source.data : '';
                                 if (!mediaType || !data) return null;
                                 return (
-                                <img
-                                    key={`${message.id || 'msg'}-img-${index}`}
-                                    src={`data:${mediaType};base64,${data}`}
-                                    alt={`Uploaded ${index + 1}`}
-                                    className="max-w-xs rounded-2xl border border-stone-200/60 shadow-sm"
-                                />
-                            )})}
-                        </div>
-                    )}
+                                    <img
+                                        key={`${message.id || 'msg'}-img-${index}`}
+                                        src={`data:${mediaType};base64,${data}`}
+                                        alt={`Uploaded ${index + 1}`}
+                                        className="max-w-xs rounded-2xl border border-stone-200/60 shadow-sm block my-2"
+                                    />
+                                );
+                            }
 
-                    {/* Tool Uses */}
-                    {toolUses.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                            {toolUses.map((toolUse, index) => (
-                                <CollapsibleToolBlock
-                                    key={`${message.id || 'msg'}-tool-${index}`}
-                                    toolName={toolUse.name}
-                                    input={toolUse.input as Record<string, unknown>}
-                                    output={toolResultById[String(toolUse.id || '')] || toolStreamById[String(toolUse.id || '')]}
-                                    status={
-                                        toolStatusById[String(toolUse.id || '')]
-                                        || (toolResultById[String(toolUse.id || '')] ? 'done' : (toolStreamById[String(toolUse.id || '')] ? 'running' : 'done'))
-                                    }
-                                />
-                            ))}
-                        </div>
-                    )}
+                            // Tool Use Block
+                            if ('type' in block && block.type === 'tool_use') {
+                                return (
+                                    <div key={`${message.id || 'msg'}-tool-${index}`} className="mt-2 text-left">
+                                        <CollapsibleToolBlock
+                                            toolName={block.name}
+                                            input={block.input as Record<string, unknown>}
+                                            output={toolResultById[String(block.id || '')] || toolStreamById[String(block.id || '')]}
+                                            status={
+                                                toolStatusById[String(block.id || '')]
+                                                || (toolResultById[String(block.id || '')] ? 'done' : (toolStreamById[String(block.id || '')] ? 'running' : 'done'))
+                                            }
+                                        />
+                                    </div>
+                                );
+                            }
+
+                            return null;
+                        })}
+                    </div>
                 </div>
             </div>
         </div>

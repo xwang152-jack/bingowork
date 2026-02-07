@@ -318,29 +318,65 @@ export function RightSidebar() {
                 {steps.length > 0 ? (
                   <div
                     ref={progressListRef}
-                    className="space-y-4 max-h-[240px] overflow-y-auto custom-scrollbar pr-2"
+                    className="flex flex-col gap-3"
                   >
-                    {steps.map((s, index) => (
-                      <div key={s.callId} className="flex items-start gap-3">
-                        <div className={`
-                          flex items-center justify-center w-6 h-6 rounded-full border text-xs font-medium shrink-0 transition-colors
-                          ${s.status === 'running'
-                            ? 'border-blue-500 text-blue-600 bg-blue-50'
-                            : s.status === 'error'
-                              ? 'border-red-500 text-red-600 bg-red-50'
-                              : 'border-stone-200 text-stone-400 bg-stone-50'
-                          }
-                        `}>
-                          {index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          <p className={`text-sm truncate transition-colors ${s.status === 'running' ? 'text-stone-900 font-medium' : 'text-stone-500'
-                            }`}>
-                            {s.name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                    {/* Horizontal Progress Steps */}
+                    <div className="flex items-center gap-0.5 overflow-x-auto custom-scrollbar pb-1 px-0.5">
+                      {steps.map((s, index) => {
+                        const isLast = index === steps.length - 1;
+                        const isDone = s.status === 'done';
+                        const isRunning = s.status === 'running';
+                        const isError = s.status === 'error';
+
+                        return (
+                          <div key={s.callId} className="flex items-center shrink-0">
+                            <div
+                              className={`
+                                flex items-center justify-center w-6 h-6 rounded-full border text-[10px] font-medium transition-all duration-300
+                                ${isDone
+                                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                                  : isError
+                                    ? 'bg-red-500 border-red-500 text-white'
+                                    : isRunning
+                                      ? 'border-blue-500 text-blue-600 bg-blue-50 ring-2 ring-blue-500/20'
+                                      : 'border-stone-200 text-stone-400 bg-stone-50'
+                                }
+                              `}
+                              title={s.name}
+                            >
+                              {isDone ? (
+                                <CheckSquare size={12} className="stroke-[3]" />
+                              ) : isError ? (
+                                <span className="text-xs">✕</span>
+                              ) : (
+                                <span>{index + 1}</span>
+                              )}
+                            </div>
+
+                            {!isLast && (
+                              <div className={`w-3 h-0.5 transition-colors duration-300 ${isDone && steps[index + 1]?.status !== 'running' ? 'bg-emerald-200' : 'bg-stone-200'
+                                }`} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Current Action Label */}
+                    <div className="bg-white/50 rounded-lg p-2.5 border border-stone-100 min-h-[40px] flex items-center">
+                      {steps.some(s => s.status === 'running') ? (
+                        <div className="flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 animate-pulse shrink-0" />
+                          <p className="text-xs text-stone-700 font-medium leading-relaxed">
+                            {steps.find(s => s.status === 'running')?.name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}...
                           </p>
                         </div>
-                      </div>
-                    ))}
+                      ) : steps.length > 0 ? (
+                        <p className="text-xs text-stone-500 leading-relaxed">
+                          任务已完成 ({steps.length} 步)
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-stone-500 leading-relaxed">步骤会随着任务展开而出现。</p>
@@ -543,7 +579,7 @@ export function RightSidebar() {
                       title={folder}
                     >
                       <Folder size={16} className="text-stone-400 shrink-0" />
-                      <span className="truncate">{folder}</span>
+                      <span className="truncate">{folder.split(/[/\\]/).pop() || folder}</span>
                     </button>
                   ))}
                 </div>

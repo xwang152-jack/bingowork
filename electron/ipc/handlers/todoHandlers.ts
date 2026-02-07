@@ -20,19 +20,29 @@ function parseTodoContent(content: string): TodoItem[] {
   const lines = content.split('\n');
   const items: TodoItem[] = [];
 
+  console.log(`[Todo] Parsing ${lines.length} lines`);
+
   for (const line of lines) {
     const trimmed = line.trim();
     // Match markdown checkbox format: - [x] text or - [ ] text
-    // Also supports: * [x] text, + [x] text
-    const match = trimmed.match(/^[-*+]\s*\[([ xX])\]\s*(.+)$/);
+    // Improved regex to be more permissive:
+    // - Allow optional space in brackets
+    // - Allow empty text
+    const match = trimmed.match(/^[-*+]\s*\[([ xX]?)\]\s*(.*)$/);
+
     if (match) {
+      const isCompleted = match[1].toLowerCase() === 'x';
+      // If bracket content is empty, it's incomplete
+      // If bracket content is space, it's incomplete
+
       items.push({
         text: match[2].trim(),
-        completed: match[1].toLowerCase() === 'x',
+        completed: isCompleted,
       });
     }
   }
 
+  console.log(`[Todo] Parsed ${items.length} items`);
   return items;
 }
 
@@ -68,6 +78,7 @@ async function readTodoFromAuthorizedFolder(): Promise<TodoList> {
 
   try {
     const content = await fs.readFile(todoPath, 'utf-8');
+    console.log(`[Todo] Read file from: ${todoPath}, length: ${content.length}`);
     const items = parseTodoContent(content);
     const stats = await fs.stat(todoPath);
     return { items, sourcePath: todoPath, exists: true, lastModified: stats.mtimeMs };
