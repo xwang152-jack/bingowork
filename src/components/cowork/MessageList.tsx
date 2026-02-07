@@ -256,7 +256,7 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
         return `${isUser
             ? 'bg-stone-50 text-stone-800 rounded-2xl rounded-tr-sm border border-stone-100 shadow-sm'
             : 'bg-white text-stone-800 rounded-2xl rounded-tl-sm border border-stone-100 shadow-sm'
-            } px-5 py-3.5`;
+            } px-5 py-3.5 w-fit max-w-full`;
     }, [isUser]);
 
     return (
@@ -267,7 +267,7 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
             </div>
 
             {/* Content */}
-            <div className={`flex-1 max-w-[85%]`}>
+            <div className={`flex-1 flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
                 <div className={contentWrapperClass}>
                     <div className="space-y-3">
                         {contentBlocks.map((block, index) => {
@@ -348,14 +348,14 @@ interface StreamingMessageProps {
 
 const StreamingMessage = memo(function StreamingMessage({ text, isDark }: StreamingMessageProps) {
     const avatarClass = `flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-stone-100 text-stone-600 shadow-sm`;
-    const contentWrapperClass = `bg-white text-stone-800 rounded-2xl rounded-tl-sm border border-stone-100 px-5 py-3.5 shadow-sm`;
+    const contentWrapperClass = `bg-white text-stone-800 rounded-2xl rounded-tl-sm border border-stone-100 px-5 py-3.5 shadow-sm w-fit max-w-full`;
 
     return (
         <div className="flex gap-4">
             <div className={avatarClass}>
                 <Bot size={20} />
             </div>
-            <div className="flex-1 max-w-[85%]">
+            <div className="flex-1">
                 <div className={contentWrapperClass}>
                     <div className="prose prose-sm max-w-none text-stone-700">
                         <MarkdownRenderer content={text} isDark={isDark} />
