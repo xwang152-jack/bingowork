@@ -112,8 +112,15 @@ export class OpenAIProvider extends BaseLLMProvider {
                     const toolUseBlocks = blocks.filter((b): b is Anthropic.ToolUseBlockParam => b.type === 'tool_use');
 
                     let content: string | null = null;
+                    let reasoning_content: string | null = null;
+
                     if (textBlocks.length > 0) {
                         content = textBlocks.map(b => b.text).join('\n');
+                        // Capture reasoning_content if present in the text block (stored as custom prop)
+                        const blockWithReasoning = textBlocks.find(b => (b as any).reasoning_content);
+                        if (blockWithReasoning) {
+                            reasoning_content = (blockWithReasoning as any).reasoning_content;
+                        }
                     }
 
                     const toolCalls: ChatCompletionMessageFunctionToolCall[] = toolUseBlocks.map(b => ({
@@ -127,6 +134,10 @@ export class OpenAIProvider extends BaseLLMProvider {
 
                     const assistantMsg: ChatCompletionMessageParam = { role: 'assistant' };
                     if (content) assistantMsg.content = content;
+                    // Inject reasoning_content for models that require it (like Kimi/Moonshot, DeepSeek)
+                    if (reasoning_content) {
+                        (assistantMsg as any).reasoning_content = reasoning_content;
+                    }
                     if (toolCalls.length > 0) assistantMsg.tool_calls = toolCalls;
 
                     messages.push(assistantMsg);
@@ -164,6 +175,7 @@ export class OpenAIProvider extends BaseLLMProvider {
 
             const finalContent: Anthropic.ContentBlock[] = [];
             let textBuffer = '';
+            let reasoningBuffer = '';
             const toolCallsMap = new Map<number, { id: string; name: string; arguments: string }>();
 
             for await (const chunk of stream) {
@@ -174,6 +186,14 @@ export class OpenAIProvider extends BaseLLMProvider {
 
                 const delta = chunk.choices?.[0]?.delta;
                 if (!delta) continue;
+
+                // Capture reasoning_content (used by Kimi, DeepSeek etc)
+                if ((delta as any).reasoning_content) {
+                    reasoningBuffer += (delta as any).reasoning_content;
+                    // We treat reasoning as part of the output stream for UI visibility if needed,
+                    // but usually it's separate. For now, we just buffer it.
+                    // If we want to show it, we might need a specific UI event.
+                }
 
                 if (delta.content) {
                     textBuffer += delta.content;
@@ -200,8 +220,13 @@ export class OpenAIProvider extends BaseLLMProvider {
             // Flush remaining tokens
             tokenBuffer?.flush();
 
-            if (textBuffer) {
-                finalContent.push({ type: 'text', text: textBuffer, citations: null });
+            if (textBuffer || reasoningBuffer) {
+                const textBlock: Anthropic.TextBlock = { type: 'text', text: textBuffer, citations: null };
+                // Attach reasoning content as a custom property
+                if (reasoningBuffer) {
+                    (textBlock as any).reasoning_content = reasoningBuffer;
+                }
+                finalContent.push(textBlock);
             }
 
             for (const tc of toolCallsMap.values()) {
