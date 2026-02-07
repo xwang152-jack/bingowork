@@ -60,14 +60,28 @@ export function ScheduleView({ onClose: _onClose }: ScheduleViewProps) {
       setTasks(prev => prev.filter(t => t.id !== data.id));
     };
 
+    const handleTaskExecuted = (_event: unknown, ...args: unknown[]) => {
+      // Reload all tasks to get updated status and last executed time
+      loadTasks();
+    };
+
+    const handleTaskFailed = (_event: unknown, ...args: unknown[]) => {
+      // Reload all tasks to get updated status and failure count
+      loadTasks();
+    };
+
     const cleanupCreated = window.ipcRenderer.on('schedule:task-created', handleTaskCreated);
     const cleanupUpdated = window.ipcRenderer.on('schedule:task-updated', handleTaskUpdated);
     const cleanupDeleted = window.ipcRenderer.on('schedule:task-deleted', handleTaskDeleted);
+    const cleanupExecuted = window.ipcRenderer.on('schedule:task-executed', handleTaskExecuted);
+    const cleanupFailed = window.ipcRenderer.on('schedule:task-failed', handleTaskFailed);
 
     return () => {
       cleanupCreated();
       cleanupUpdated();
       cleanupDeleted();
+      cleanupExecuted();
+      cleanupFailed();
     };
   }, []);
 
