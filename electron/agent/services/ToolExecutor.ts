@@ -15,6 +15,7 @@ export interface ToolExecutionContext {
     requestConfirmation: (tool: string, description: string, args: Record<string, unknown>) => Promise<boolean>;
     onArtifactCreated: (artifact: { path: string; name: string; type: string }) => void;
     onToolStream?: (chunk: string, type: 'stdout' | 'stderr') => void;
+    signal?: AbortSignal;
 }
 
 export interface ToolInput {

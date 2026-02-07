@@ -467,7 +467,9 @@ export class AgentRuntime {
             try {
                 result = await this.toolRegistry.executeTool(
                     toolUse.name,
-                    toolUse.input as Record<string, unknown>
+                    toolUse.input as Record<string, unknown>,
+                    undefined,
+                    this.abortController?.signal
                 );
                 this.broadcast('agent:tool-result', { callId: toolUse.id, status: 'done' });
                 this.eventSink?.logEvent('tool_executed', {

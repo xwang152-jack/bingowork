@@ -38,8 +38,8 @@ export function useAgent(): UseAgentResult {
 
         const removeListener = window.ipcRenderer.on('agent:history-update', async (_event, updatedHistory) => {
             setHistory(updatedHistory as AgentMessage[]);
-            setIsProcessing(false);
-            setStreamingText('');
+            // Do not set isProcessing to false here, wait for agent:processing-state
+            setStreamingText(''); // Clear streaming text as it is now part of history
 
             // 优化：异步保存会话，避免阻塞 UI
             // 使用 setTimeout 将深拷贝操作推迟到下一个事件循环
@@ -59,7 +59,7 @@ export function useAgent(): UseAgentResult {
         const removeErrorListener = window.ipcRenderer.on('agent:error', (_event, err) => {
             console.error('Agent Error:', err);
             setError(err as string);
-            setIsProcessing(false);
+            // setIsProcessing(false); // Let state manager handle this via processing-state event
             setStreamingText('');
         });
 
@@ -80,11 +80,20 @@ export function useAgent(): UseAgentResult {
             });
         });
 
+        const removeProcessingStateListener = window.ipcRenderer.on('agent:processing-state', (_event, state) => {
+            const { isProcessing } = state as { isProcessing: boolean };
+            setIsProcessing(isProcessing);
+            if (!isProcessing) {
+                setStreamingText('');
+            }
+        });
+
         return () => {
             removeListener();
             removeErrorListener();
             removeStageListener();
             removeStreamListener();
+            removeProcessingStateListener();
             // 清理 RAF
             if (rafRef.current) {
                 cancelAnimationFrame(rafRef.current);

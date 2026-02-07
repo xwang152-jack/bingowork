@@ -75,7 +75,9 @@ export class AgentStateManager {
      * Set processing state
      */
     setIsProcessing(processing: boolean): void {
+        if (this.isProcessing === processing) return;
         this.isProcessing = processing;
+        this.broadcastCallback?.('agent:processing-state', { isProcessing: processing });
     }
 
     /**

@@ -368,7 +368,8 @@ class RunCommandExecutor extends BaseToolExecutor {
         return await this.fsTools.runCommandStream(
             { ...args, cwd: resolvedCwd },
             defaultCwd,
-            streamCallback
+            streamCallback,
+            context.signal
         );
     }
 

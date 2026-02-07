@@ -145,7 +145,8 @@ export class ToolRegistry {
     async executeTool(
         name: string,
         input: Record<string, unknown>,
-        streamCallback?: (chunk: string, type: 'stdout' | 'stderr') => void
+        streamCallback?: (chunk: string, type: 'stdout' | 'stderr') => void,
+        signal?: AbortSignal
     ): Promise<string> {
         const mode = this.getWorkMode();
 
@@ -209,7 +210,8 @@ ${skillInfo.instructions}
         const context: ToolExecutionContext = {
             requestConfirmation: this.callbacks.requestConfirmation,
             onArtifactCreated: this.callbacks.onArtifactCreated,
-            onToolStream: streamCallback || this.callbacks.onToolStream
+            onToolStream: streamCallback || this.callbacks.onToolStream,
+            signal
         };
 
         // Execute the tool

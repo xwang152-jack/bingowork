@@ -115,7 +115,8 @@ export class FileSystemTools {
     async runCommandStream(
         args: { command: string, cwd?: string },
         defaultCwd: string,
-        onOutput: (chunk: string, type: 'stdout' | 'stderr') => void
+        onOutput: (chunk: string, type: 'stdout' | 'stderr') => void,
+        signal?: AbortSignal
     ): Promise<string> {
         const workingDir = args.cwd || defaultCwd;
 
@@ -151,6 +152,17 @@ export class FileSystemTools {
                 if (timeoutHandle) clearTimeout(timeoutHandle);
                 resolve(finalResponse);
             };
+
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    try {
+                        child.kill();
+                    } catch {
+                        void 0;
+                    }
+                    settle(`Command execution aborted by user.`);
+                });
+            }
 
             let fullOutput = "";
 
