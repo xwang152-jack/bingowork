@@ -1,3 +1,16 @@
+/**
+ * Agent Runtime
+ * 
+ * Core orchestration engine for the AI agent.
+ * Refactored to use separate modules for better maintainability.
+ * 
+ * Modules:
+ * - AgentConstants: Magic numbers and configuration
+ * - AgentErrorHandler: Error handling utilities
+ * - AgentStateManager: State management
+ * - AgentUIBridge: UI communication
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
 import { BrowserWindow } from 'electron';
 
@@ -18,29 +31,28 @@ import { generateResponse, ProviderId } from './providers/generateResponse';
 import { logs } from '../utils/logger';
 import { createPendingConfirmation } from '../ipc/handlers/agentHandlers';
 
+// Import refactored modules
+import { AGENT_CONSTANTS, SUPPORTED_IMAGE_TYPES, AgentStage } from './AgentConstants';
+import { AgentErrorHandler, AgentError } from './AgentErrorHandler';
+import { AgentStateManager, AgentEventSink } from './AgentStateManager';
+import { AgentUIBridge } from './AgentUIBridge';
+
+// Re-export types for compatibility
+export type { AgentStage, AgentEventSink };
+
 export type AgentMessage = {
     role: 'user' | 'assistant';
     content: string | Anthropic.ContentBlock[];
     id?: string;
 };
 
-export type AgentStage = 'IDLE' | 'THINKING' | 'PLANNING' | 'EXECUTING' | 'FEEDBACK';
-
-export type AgentEventSink = {
-    logEvent: (type: string, payload: unknown) => void;
-};
-
-interface AgentError extends Error {
-    status?: number;
-}
-
 export class AgentRuntime {
     private llmProvider: BaseLLMProvider;
     private provider: ApiProvider;
     private apiKey: string;
     private apiUrl: string;
-    private history: Anthropic.MessageParam[] = [];
-    private windows: BrowserWindow[] = [];
+    private model: string;
+    private workMode: WorkMode = 'cowork';
 
     // Core Services
     private fsTools: FileSystemTools;
@@ -51,40 +63,33 @@ export class AgentRuntime {
     private toolRegistry: ToolRegistry;
     private taskAnalyzer: TaskAnalyzer;
 
+    // Refactored modules
+    private stateManager: AgentStateManager;
+    private uiBridge: AgentUIBridge;
+
     private abortController: AbortController | null = null;
-    private isProcessing = false;
-    private pendingConfirmations: Map<string, { resolve: (approved: boolean) => void }> = new Map();
-    private pendingQuestions: Map<string, { resolve: (answer: string) => void }> = new Map();
     private artifacts: { path: string; name: string; type: string }[] = [];
     private currentToolUseId: string | null = null;
-    private stage: AgentStage = 'IDLE';
     private eventSink?: AgentEventSink;
 
-    private model: string;
-    private workMode: WorkMode = 'cowork';
-
-    // Performance optimization: Lazy load skills and MCP
+    // Performance optimization: Lazy loading
     private skillsLoaded = false;
     private mcpLoaded = false;
 
-    // Performance optimization: Cache tools and system prompt to avoid rebuilding on every iteration
+    // Cache for tools and system prompt
     private cachedTools: Anthropic.Tool[] | null = null;
     private cachedSystemPrompt: string | null = null;
     private cachedWorkMode: WorkMode | null = null;
     private cacheInvalidated = false;
 
-    // Error handling: Track retry counts for sensitive content errors
-    private sensitiveContentRetries = 0;
-    private readonly MAX_SENSITIVE_CONTENT_RETRIES = 3;
-
-    // History management
-    private readonly MAX_HISTORY_SIZE = 200; // Maximum messages in history
-
-    // Input validation limits
-    private readonly MAX_IMAGES_PER_MESSAGE = 10; // Maximum number of images per message
-    private readonly MAX_IMAGE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB max per image
-
-    constructor(apiKey: string, window: BrowserWindow, model: string = 'claude-3-5-sonnet-20241022', apiUrl: string = 'https://api.anthropic.com', provider: ApiProvider = 'anthropic', eventSink?: AgentEventSink) {
+    constructor(
+        apiKey: string,
+        window: BrowserWindow,
+        model: string = 'claude-3-5-sonnet-20241022',
+        apiUrl: string = 'https://api.anthropic.com',
+        provider: ApiProvider = 'anthropic',
+        eventSink?: AgentEventSink
+    ) {
         this.provider = provider;
         this.model = model;
         this.workMode = configStore.get('workMode') || 'cowork';
@@ -93,9 +98,12 @@ export class AgentRuntime {
         this.llmProvider = this.createProvider(this.apiKey, this.apiUrl, provider);
         this.eventSink = eventSink;
 
-        this.windows = [window];
+        // Initialize refactored modules
+        this.stateManager = new AgentStateManager(eventSink);
+        this.uiBridge = new AgentUIBridge(window);
+        this.stateManager.setBroadcastCallback((channel, data) => this.uiBridge.broadcast(channel, data));
 
-        // Initialize reusable tools/managers
+        // Initialize tools/managers
         this.fsTools = new FileSystemTools();
         this.browserTools = new BrowserTools();
         this.skillManager = new SkillManager();
@@ -116,7 +124,7 @@ export class AgentRuntime {
                     this.artifacts.push(artifact);
                     this.broadcast('agent:artifact-created', artifact);
                 },
-                askUser: this.askUser.bind(this),
+                askUser: (question, options) => this.uiBridge.askUser(question, options),
                 onToolStream: (chunk: string, type: 'stdout' | 'stderr') => {
                     if (this.currentToolUseId) {
                         this.broadcast('agent:tool-output-stream', {
@@ -128,143 +136,35 @@ export class AgentRuntime {
                 }
             }
         );
-
-        // Note: IPC handlers are now registered in main.ts, not here
     }
 
-    public getWorkMode(): WorkMode {
-        return this.workMode;
-    }
+    // Public API - Work Mode
+    public getWorkMode(): WorkMode { return this.workMode; }
 
     public setWorkMode(mode: WorkMode) {
         if (this.workMode !== mode) {
             this.workMode = mode;
-            this.invalidateCache(); // Invalidate cache when work mode changes
+            this.invalidateCache();
         }
     }
 
-    /**
-     * Invalidate cached tools and system prompt
-     * Call this when work mode changes or dynamic tools are loaded
-     */
-    private invalidateCache(): void {
-        this.cachedTools = null;
-        this.cachedSystemPrompt = null;
-        this.cacheInvalidated = true;
-        logs.agent.debug('[AgentRuntime] Cache invalidated');
-    }
-
-    /**
-     * Get tools with caching to avoid unnecessary rebuilds
-     */
-    private async getToolsIfNeeded(): Promise<Anthropic.Tool[]> {
-        // Check if cache is valid
-        if (!this.cacheInvalidated && this.cachedTools && this.cachedWorkMode === this.workMode) {
-            return this.cachedTools;
-        }
-
-        // Rebuild cache
-        logs.agent.debug('[AgentRuntime] Rebuilding tool cache...');
-        const startTime = performance.now();
-
-        this.cachedTools = await this.toolRegistry.getTools();
-        this.cachedWorkMode = this.workMode;
-        this.cacheInvalidated = false;
-
-        const duration = performance.now() - startTime;
-        logs.agent.debug(`[AgentRuntime] Tool cache rebuilt in ${duration.toFixed(2)}ms (${this.cachedTools.length} tools)`);
-
-        return this.cachedTools;
-    }
-
-    /**
-     * Get system prompt with caching to avoid unnecessary rebuilds
-     */
-    private getSystemPromptIfNeeded(): string {
-        // Check if cache is valid
-        if (!this.cacheInvalidated && this.cachedSystemPrompt && this.cachedWorkMode === this.workMode) {
-            return this.cachedSystemPrompt;
-        }
-
-        // Rebuild cache
-        logs.agent.debug('[AgentRuntime] Rebuilding system prompt cache...');
-        const startTime = performance.now();
-
-        this.cachedSystemPrompt = this.promptService.buildSystemPrompt(this.skillManager, this.workMode);
-        this.cachedWorkMode = this.workMode;
-        this.cacheInvalidated = false;
-
-        const duration = performance.now() - startTime;
-        const promptLength = this.cachedSystemPrompt.length;
-        logs.agent.debug(`[AgentRuntime] System prompt cache rebuilt in ${duration.toFixed(2)}ms (${promptLength} chars)`);
-
-        return this.cachedSystemPrompt;
-    }
-
-    /**
-     * Smart history management that preserves important context
-     * while keeping memory usage under control
-     */
-    private manageHistory(): void {
-        if (this.history.length <= this.MAX_HISTORY_SIZE * 0.9) {
-            return; // Still has room
-        }
-
-        const SYSTEM_MESSAGES_TO_KEEP = 3; // Keep initial system messages
-        const messagesToKeep = this.MAX_HISTORY_SIZE - SYSTEM_MESSAGES_TO_KEEP;
-        const oldSize = this.history.length;
-
-        // Preserve beginning (system messages) and end (recent context)
-        this.history = [
-            ...this.history.slice(0, SYSTEM_MESSAGES_TO_KEEP),
-            ...this.history.slice(-messagesToKeep)
-        ];
-
-        logs.agent.info(`[AgentRuntime] History trimmed from ${oldSize} to ${this.history.length} messages`);
-    }
-
-    /**
-     * Check memory usage and trigger cleanup if needed
-     */
-    private checkMemoryUsage(): void {
-        const usage = process.memoryUsage();
-        const MB = 1024 * 1024;
-        const heapUsedMB = usage.heapUsed / MB;
-
-        // Warn if memory usage is high
-        if (heapUsedMB > 500) {
-            logs.agent.warn(`[AgentRuntime] High memory usage: ${heapUsedMB.toFixed(2)}MB`);
-            this.manageHistory();
-        }
-    }
-
+    // Public API - Model & Config
     public setModel(model: string) {
         const normalized = String(model || '').trim();
-        if (!normalized) return;
-        this.model = normalized;
+        if (normalized) this.model = normalized;
     }
 
-    public getMCPService(): MCPClientService {
-        return this.mcpService;
-    }
-
-    public getToolRegistry(): ToolRegistry {
-        return this.toolRegistry;
-    }
+    public getMCPService(): MCPClientService { return this.mcpService; }
+    public getToolRegistry(): ToolRegistry { return this.toolRegistry; }
 
     public updateLLMConfig(next: { model?: string; provider?: ApiProvider; apiUrl?: string; apiKey?: string }) {
-        const nextModel = typeof next?.model === 'string' ? String(next.model || '').trim() : '';
-        if (nextModel) this.model = nextModel;
+        if (next?.model) this.model = String(next.model).trim();
 
         const nextProvider = next?.provider || this.provider;
-        const nextApiUrl = typeof next?.apiUrl === 'string' ? String(next.apiUrl || '').trim().replace(/\/+$/, '') : this.apiUrl;
+        const nextApiUrl = typeof next?.apiUrl === 'string' ? String(next.apiUrl).trim().replace(/\/+$/, '') : this.apiUrl;
         const nextApiKey = typeof next?.apiKey === 'string' ? next.apiKey : this.apiKey;
 
-        const providerChanged = nextProvider !== this.provider;
-        const apiUrlChanged = nextApiUrl !== this.apiUrl;
-        const apiKeyChanged = nextApiKey !== this.apiKey;
-
-        if (providerChanged || apiUrlChanged || apiKeyChanged) {
+        if (nextProvider !== this.provider || nextApiUrl !== this.apiUrl || nextApiKey !== this.apiKey) {
             this.provider = nextProvider;
             this.apiUrl = nextApiUrl;
             this.apiKey = nextApiKey;
@@ -272,656 +172,405 @@ export class AgentRuntime {
         }
     }
 
+    // Public API - Window Management (delegate to UIBridge)
+    public addWindow(win: BrowserWindow) { this.uiBridge.addWindow(win); }
+    public removeWindow(win: BrowserWindow) { this.uiBridge.removeWindow(win); }
+
+    // Public API - Lifecycle
+    public async shutdown() {
+        this.abortController?.abort();
+        try { await this.mcpService.closeAll(); } catch { void 0; }
+    }
+
+    public async initialize() {
+        logs.agent.info('AgentRuntime initialized (Skills & MCP will load on-demand)');
+    }
+
+    // Public API - History (delegate to StateManager)
+    public clearHistory() {
+        this.stateManager.clearHistory();
+        this.artifacts = [];
+        this.notifyUpdate();
+    }
+
+    public loadHistory(messages: Anthropic.MessageParam[]) {
+        this.stateManager.loadHistory(messages);
+        this.artifacts = [];
+        this.notifyUpdate();
+    }
+
+    public getHistorySize(): number { return this.stateManager.getHistorySize(); }
+
+    // Public API - Confirmations
+    public handleConfirmResponse(id: string, approved: boolean) {
+        this.uiBridge.handleConfirmResponse(id, approved);
+    }
+
+    public handleUserQuestionResponse(id: string, answer: string) {
+        this.uiBridge.handleUserQuestionResponse(id, answer);
+    }
+
+    public handleConfirmResponseWithRemember(id: string, approved: boolean, _remember: boolean): void {
+        this.uiBridge.handleConfirmResponse(id, approved);
+    }
+
+    public abort() { this.abortController?.abort(); }
+
+    // Main message processing
+    public async processUserMessage(input: string | { content: string, images: string[] }) {
+        if (this.stateManager.getIsProcessing()) {
+            logs.agent.warn('Agent is already processing. Ignoring concurrent request.');
+            return;
+        }
+
+        this.stateManager.setIsProcessing(true);
+        this.stateManager.resetSensitiveContentRetries();
+
+        try {
+            this.abortController = new AbortController();
+            this.stateManager.setStage('THINKING');
+            this.eventSink?.logEvent('user_message', this.summarizeUserInput(input));
+
+            await this.lazyLoadSkillsAndMCP();
+            this.stateManager.checkMemoryUsage();
+
+            const userContent = await this.prepareUserContent(input);
+            this.stateManager.addToHistory({ role: 'user', content: userContent });
+            this.notifyUpdate();
+
+            await this.runLoop();
+
+        } catch (error: unknown) {
+            this.handleProcessingError(error);
+        } finally {
+            this.stateManager.setIsProcessing(false);
+            this.abortController = null;
+            this.stateManager.setStage('IDLE');
+            this.notifyUpdate();
+        }
+    }
+
+    // Tool execution for scheduled tasks
+    async executeToolDirectly(toolName: string, args: Record<string, unknown>): Promise<string> {
+        logs.agent.info(`[executeToolDirectly] Executing tool: ${toolName}`);
+
+        if (!await this.checkToolPermission(toolName, args)) {
+            throw new Error(`Permission denied for tool: ${toolName}`);
+        }
+
+        return this.toolRegistry.executeTool(toolName, args);
+    }
+
+    // Private helpers
     private createProvider(apiKey: string, apiUrl: string, provider: ApiProvider): BaseLLMProvider {
         if (provider === 'openai') return new OpenAIProvider(apiKey, apiUrl);
         if (provider === 'minimax') return new MiniMaxProvider(apiKey, apiUrl);
         return new AnthropicProvider(apiKey, apiUrl);
     }
 
-    // Add a window to receive updates (for floating ball)
-    public addWindow(win: BrowserWindow) {
-        if (!this.windows.includes(win)) {
-            this.windows.push(win);
+    private invalidateCache(): void {
+        this.cachedTools = null;
+        this.cachedSystemPrompt = null;
+        this.cacheInvalidated = true;
+    }
+
+    private async getToolsIfNeeded(): Promise<Anthropic.Tool[]> {
+        if (!this.cacheInvalidated && this.cachedTools && this.cachedWorkMode === this.workMode) {
+            return this.cachedTools;
         }
+        this.cachedTools = await this.toolRegistry.getTools();
+        this.cachedWorkMode = this.workMode;
+        this.cacheInvalidated = false;
+        return this.cachedTools;
     }
 
-    public async shutdown() {
-        this.abortController?.abort();
-        try {
-            await this.mcpService.closeAll();
-        } catch {
-            void 0;
+    private getSystemPromptIfNeeded(): string {
+        if (!this.cacheInvalidated && this.cachedSystemPrompt && this.cachedWorkMode === this.workMode) {
+            return this.cachedSystemPrompt;
         }
+        this.cachedSystemPrompt = this.promptService.buildSystemPrompt(this.skillManager, this.workMode);
+        this.cachedWorkMode = this.workMode;
+        this.cacheInvalidated = false;
+        return this.cachedSystemPrompt;
     }
 
-    public async initialize() {
-        logs.agent.info('Initializing AgentRuntime...');
-        // Performance optimization: Skip pre-loading skills and MCP
-        // They will be loaded on-demand when first user message is processed
-        logs.agent.info('AgentRuntime initialized (Skills & MCP will load on-demand)');
-    }
-
-    public removeWindow(win: BrowserWindow) {
-        this.windows = this.windows.filter(w => w !== win);
-
-        // Clean up pending promises associated with this window
-        // This prevents memory leaks when windows are closed
-        const pendingIds = [
-            ...this.pendingConfirmations.keys(),
-            ...this.pendingQuestions.keys()
-        ];
-
-        for (const id of pendingIds) {
-            // Reject any pending promises that are still waiting
-            const confirmation = this.pendingConfirmations.get(id);
-            if (confirmation) {
-                confirmation.resolve(false); // Deny by default when window is closed
-                this.pendingConfirmations.delete(id);
-            }
-
-            const question = this.pendingQuestions.get(id);
-            if (question) {
-                question.resolve('Window closed'); // Provide default answer
-                this.pendingQuestions.delete(id);
-            }
+    private async lazyLoadSkillsAndMCP(): Promise<void> {
+        if (!this.skillsLoaded) {
+            await this.skillManager.loadSkills();
+            await this.toolRegistry.loadDynamicTools();
+            this.skillsLoaded = true;
+            this.invalidateCache();
         }
 
-        logs.agent.info(`Removed window and cleaned up ${pendingIds.length} pending promises`);
-    }
-
-    // Handle confirmation response
-    public handleConfirmResponse(id: string, approved: boolean) {
-        const pending = this.pendingConfirmations.get(id);
-        if (pending) {
-            pending.resolve(approved);
-            this.pendingConfirmations.delete(id);
-        }
-    }
-
-    // Handle user question response
-    public handleUserQuestionResponse(id: string, answer: string) {
-        const pending = this.pendingQuestions.get(id);
-        if (pending) {
-            pending.resolve(answer);
-            this.pendingQuestions.delete(id);
-        }
-    }
-
-    // Callback for ToolRegistry to ask user
-    private async askUser(question: string, options?: string[]): Promise<string> {
-        const id = Math.random().toString(36).substring(7);
-        this.broadcast('agent:user-question', { id, question, options });
-
-        return new Promise((resolve) => {
-            this.pendingQuestions.set(id, { resolve });
-            // Optional: Set a timeout if we want to avoid hanging forever, 
-            // but user interaction might take time.
-        });
-    }
-
-    // Clear history for new session
-    public clearHistory() {
-        this.history = [];
-        this.artifacts = [];
-        this.notifyUpdate();
-    }
-
-    // Load history from saved session
-    public loadHistory(messages: Anthropic.MessageParam[]) {
-        this.history = messages.slice(0, this.MAX_HISTORY_SIZE);
-        this.artifacts = [];
-        this.notifyUpdate();
-    }
-
-    /**
-     * Get current history size
-     */
-    public getHistorySize(): number {
-        return this.history.length;
-    }
-
-    public async processUserMessage(input: string | { content: string, images: string[] }) {
-        if (this.isProcessing) {
-            logs.agent.warn('Agent is already processing a message. Ignoring concurrent request.');
-            return;
-        }
-
-        this.isProcessing = true;
-
-        // Reset retry counter for new message
-        this.sensitiveContentRetries = 0;
-
-        try {
-            this.abortController = new AbortController();
-            this.setStage('THINKING');
-            this.eventSink?.logEvent('user_message', this.summarizeUserInput(input));
-
-            // Performance optimization: Lazy load skills on first message
-            if (!this.skillsLoaded) {
-                logs.agent.info('Loading skills on-demand...');
-                await this.skillManager.loadSkills();
-                this.skillsLoaded = true;
-
-                // Load dynamic tool executors after skills are loaded
+        if (!this.mcpLoaded) {
+            if (configStore.getNetworkAccess()) {
+                await this.mcpService.loadClients();
                 await this.toolRegistry.loadDynamicTools();
-                this.invalidateCache(); // Invalidate cache after loading dynamic tools
-            }
-
-            // Performance optimization: Lazy load MCP clients on first message
-            if (!this.mcpLoaded) {
-                if (configStore.getNetworkAccess()) {
-                    logs.agent.info('Loading MCP clients on-demand...');
-                    await this.mcpService.loadClients();
-
-                    // Load MCP tool executors after clients are loaded
-                    await this.toolRegistry.loadDynamicTools();
-                    this.invalidateCache(); // Invalidate cache after loading dynamic tools
-                } else {
-                    await this.mcpService.closeAll();
-                }
-                this.mcpLoaded = true;
-            }
-
-            // Check memory usage before processing
-            this.checkMemoryUsage();
-
-            // Task complexity analysis for TodoWrite enforcement (Cowork mode only)
-            let userContent: string | Anthropic.ContentBlockParam[] = '';
-            let userText = '';
-
-            if (typeof input === 'string') {
-                userText = input;
+                this.invalidateCache();
             } else {
-                userText = input.content || '';
+                await this.mcpService.closeAll();
             }
-
-            // Analyze task complexity and inject reminder if needed (Cowork mode only)
-            if (this.workMode === 'cowork' && userText.trim()) {
-                const analysis = this.taskAnalyzer.analyzeMessage(userText);
-
-                if (analysis.requiresTodo) {
-                    logs.agent.info(`[TaskAnalyzer] Complex task detected (score: ${analysis.score}), complexity: ${analysis.complexity}`);
-
-                    // Inject system reminder to use TodoWrite
-                    const reminder = this.buildTodoReminder(analysis);
-                    userText = reminder + '\n\n' + userText;
-
-                    // Broadcast to UI that TodoWrite is recommended
-                    this.broadcast('agent:todo-recommended', {
-                        complexity: analysis.complexity,
-                        reason: analysis.reason,
-                        estimatedSteps: analysis.estimatedSteps
-                    });
-                }
-            }
-
-            if (typeof input === 'string') {
-                userContent = userText;
-            } else {
-                const blocks: Anthropic.ContentBlockParam[] = [];
-
-                // Process images with validation
-                if (input.images && input.images.length > 0) {
-                    const SUPPORTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
-                    // Validate image count
-                    if (input.images.length > this.MAX_IMAGES_PER_MESSAGE) {
-                        throw new Error(`Too many images. Maximum ${this.MAX_IMAGES_PER_MESSAGE} images per message, received ${input.images.length}.`);
-                    }
-
-                    for (const img of input.images) {
-                        // format: data:image/png;base64,......
-                        const match = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-                        if (match) {
-                            const mediaType = match[1];
-                            const data = match[2];
-
-                            if (!SUPPORTED_TYPES.includes(mediaType)) {
-                                logs.agent.warn(`Unsupported image type: ${mediaType}. Skipping.`);
-                                continue;
-                            }
-
-                            // Validate image size (base64 encoded size)
-                            const base64Size = Buffer.byteLength(data, 'base64');
-                            if (base64Size > this.MAX_IMAGE_SIZE_BYTES) {
-                                logs.agent.warn(`Image size exceeds ${this.MAX_IMAGE_SIZE_BYTES / 1024 / 1024}MB. Skipping.`);
-                                continue;
-                            }
-
-                            blocks.push({
-                                type: 'image',
-                                source: {
-                                    type: 'base64',
-                                    media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                                    data: data
-                                }
-                            });
-                        } else {
-                            logs.agent.warn('Invalid image data format. Skipping.');
-                        }
-                    }
-
-                    // If all images were filtered out, warn the user
-                    if (blocks.length === 0 && input.images.length > 0) {
-                        logs.agent.warn('No valid images were processed. All images were filtered out.');
-                    }
-                }
-                // Add text
-                if (input.content && input.content.trim()) {
-                    blocks.push({ type: 'text', text: input.content });
-                } else if (blocks.some(b => b.type === 'image')) {
-                    // [Fix] If only images are present, add a default prompt to satisfy API requirements
-                    blocks.push({ type: 'text', text: "Please analyze this image." });
-                }
-                userContent = blocks;
-            }
-
-            // Add user message to history
-            this.history.push({ role: 'user', content: userContent });
-            this.notifyUpdate();
-
-            // Start the agent loop
-            await this.runLoop();
-
-        } catch (error: unknown) {
-            const err = error as { status?: number; message?: string };
-            logs.agent.error('Agent Loop Error:', error);
-            this.eventSink?.logEvent('error', { message: err.message || String(error), status: err.status });
-
-            // [Fix] Handle MiniMax/provider sensitive content errors gracefully
-            if (err.status === 500 && (err.message?.includes('sensitive') || JSON.stringify(error).includes('1027'))) {
-                this.broadcast('agent:error', '供应商返回敏感内容拦截（1027），请修改输入或稍后重试。');
-            } else if (err.status === 401 || err.status === 403) {
-                this.broadcast('agent:error', '鉴权失败：API Key 无效、已过期或未配置，请在设置中重新填写。');
-            } else if (err.status === 429) {
-                this.broadcast('agent:error', '请求过于频繁（Rate Limit），请稍后重试。');
-            } else if (err.status === 400 && err.message) {
-                this.broadcast('agent:error', err.message);
-            } else {
-                const rawMessage = err.message || String(error);
-                const normalized = /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|fetch failed|network/i.test(rawMessage)
-                    ? '网络错误：请检查 Base URL 是否正确、网络是否可用。'
-                    : rawMessage || '发生未知错误';
-                this.broadcast('agent:error', normalized);
-            }
-        } finally {
-            this.isProcessing = false;
-            this.abortController = null;
-            this.setStage('IDLE');
-            this.notifyUpdate();
+            this.mcpLoaded = true;
         }
+    }
+
+    private async prepareUserContent(input: string | { content: string, images: string[] }): Promise<string | Anthropic.ContentBlockParam[]> {
+        let userText = typeof input === 'string' ? input : (input.content || '');
+
+        // Task complexity analysis for Cowork mode
+        if (this.workMode === 'cowork' && userText.trim()) {
+            const analysis = this.taskAnalyzer.analyzeMessage(userText);
+            if (analysis.requiresTodo) {
+                logs.agent.info(`[TaskAnalyzer] Complex task detected (score: ${analysis.score})`);
+                userText = this.buildTodoReminder(analysis) + '\n\n' + userText;
+                this.broadcast('agent:todo-recommended', {
+                    complexity: analysis.complexity,
+                    reason: analysis.reason,
+                    estimatedSteps: analysis.estimatedSteps
+                });
+            }
+        }
+
+        if (typeof input === 'string') return userText;
+
+        const blocks: Anthropic.ContentBlockParam[] = [];
+
+        // Process images
+        if (input.images?.length) {
+            if (input.images.length > AGENT_CONSTANTS.MAX_IMAGES_PER_MESSAGE) {
+                throw new Error(`Too many images. Maximum ${AGENT_CONSTANTS.MAX_IMAGES_PER_MESSAGE}.`);
+            }
+
+            for (const img of input.images) {
+                const match = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+                if (!match) continue;
+
+                const [, mediaType, data] = match;
+                if (!SUPPORTED_IMAGE_TYPES.includes(mediaType as any)) continue;
+                if (Buffer.byteLength(data, 'base64') > AGENT_CONSTANTS.MAX_IMAGE_SIZE_BYTES) continue;
+
+                blocks.push({
+                    type: 'image',
+                    source: { type: 'base64', media_type: mediaType as any, data }
+                });
+            }
+        }
+
+        if (input.content?.trim()) {
+            blocks.push({ type: 'text', text: input.content });
+        } else if (blocks.some(b => b.type === 'image')) {
+            blocks.push({ type: 'text', text: "Please analyze this image." });
+        }
+
+        return blocks;
+    }
+
+    private async runLoop() {
+        let keepGoing = true;
+        let iterationCount = 0;
+
+        while (keepGoing && iterationCount < AGENT_CONSTANTS.MAX_ITERATIONS) {
+            iterationCount++;
+            if (this.abortController?.signal.aborted) break;
+
+            // Sync work mode
+            const configuredWorkMode = configStore.get('workMode') || 'cowork';
+            if (this.workMode !== configuredWorkMode) this.workMode = configuredWorkMode;
+
+            const tools = await this.getToolsIfNeeded();
+            const systemPrompt = this.getSystemPromptIfNeeded();
+
+            try {
+                this.validateConfig();
+                this.stateManager.setStage('THINKING', { iteration: iterationCount });
+
+                const finalContent = await generateResponse(
+                    this.provider as ProviderId,
+                    {
+                        model: this.model,
+                        systemPrompt,
+                        messages: this.stateManager.getHistory(),
+                        tools,
+                        maxTokens: AGENT_CONSTANTS.DEFAULT_MAX_TOKENS,
+                        signal: this.abortController?.signal,
+                        onToken: (token) => this.broadcast('agent:stream-token', token)
+                    },
+                    { apiKey: this.apiKey, apiUrl: this.apiUrl },
+                    this.llmProvider
+                );
+
+                if (this.abortController?.signal.aborted) return;
+                keepGoing = await this.processContent(finalContent, iterationCount);
+
+            } catch (loopError: unknown) {
+                const shouldContinue = await this.handleLoopError(loopError, iterationCount);
+                if (!shouldContinue.continue) throw loopError;
+                if (shouldContinue.decrementIteration) iterationCount--;
+            }
+        }
+    }
+
+    private validateConfig(): void {
+        if (!String(this.apiKey || '').trim()) {
+            throw AgentErrorHandler.createError('API Key 未配置', 401);
+        }
+        if (!String(this.model || '').trim()) {
+            throw AgentErrorHandler.createError('模型未配置', 400);
+        }
+        if (!String(this.apiUrl || '').trim()) {
+            throw AgentErrorHandler.createError('Base URL 未配置', 400);
+        }
+    }
+
+    private async processContent(finalContent: Anthropic.ContentBlock[], iterationCount: number): Promise<boolean> {
+        if (finalContent.length === 0) {
+            this.stateManager.setStage('FEEDBACK');
+            return false;
+        }
+
+        this.stateManager.addToHistory({ role: 'assistant', content: finalContent });
+        this.notifyUpdate();
+
+        const toolUses = finalContent.filter(c => c.type === 'tool_use');
+        if (toolUses.length === 0) {
+            this.stateManager.setStage('FEEDBACK');
+            return false;
+        }
+
+        this.stateManager.setStage('PLANNING', { toolCount: toolUses.length });
+        const toolResults = await this.executeTools(toolUses);
+
+        this.stateManager.addToHistory({ role: 'user', content: toolResults });
+        this.notifyUpdate();
+        this.stateManager.setStage('THINKING', { iteration: iterationCount });
+
+        return true;
+    }
+
+    private async executeTools(toolUses: Anthropic.ContentBlock[]): Promise<Anthropic.ToolResultBlockParam[]> {
+        const results: Anthropic.ToolResultBlockParam[] = [];
+
+        for (const toolUse of toolUses) {
+            if (toolUse.type !== 'tool_use') continue;
+
+            this.broadcast('agent:tool-call', {
+                callId: toolUse.id,
+                name: toolUse.name,
+                input: toolUse.input as Record<string, unknown>
+            });
+            this.stateManager.setStage('EXECUTING', { tool: toolUse.name, toolUseId: toolUse.id });
+            this.currentToolUseId = toolUse.id;
+
+            let result = "Tool execution failed or unknown tool.";
+            const startedAt = Date.now();
+
+            try {
+                result = await this.toolRegistry.executeTool(
+                    toolUse.name,
+                    toolUse.input as Record<string, unknown>
+                );
+                this.broadcast('agent:tool-result', { callId: toolUse.id, status: 'done' });
+                this.eventSink?.logEvent('tool_executed', {
+                    tool: toolUse.name, toolUseId: toolUse.id,
+                    durationMs: Date.now() - startedAt, ok: true
+                });
+            } catch (toolErr: unknown) {
+                result = `Error executing tool: ${(toolErr as Error).message}`;
+                this.broadcast('agent:tool-result', {
+                    callId: toolUse.id, status: 'error',
+                    error: (toolErr as Error).message
+                });
+                this.eventSink?.logEvent('tool_executed', {
+                    tool: toolUse.name, toolUseId: toolUse.id,
+                    durationMs: Date.now() - startedAt, ok: false,
+                    error: (toolErr as Error).message
+                });
+            }
+
+            this.currentToolUseId = null;
+            results.push({ type: 'tool_result', tool_use_id: toolUse.id, content: result });
+        }
+
+        return results;
+    }
+
+    private async handleLoopError(error: unknown, _iterationCount: number): Promise<{ continue: boolean; decrementIteration?: boolean }> {
+        if (AgentErrorHandler.isRateLimitError(error)) {
+            await AgentErrorHandler.handleRateLimit(0);
+            this.broadcast('agent:status', 'Rate limit hit, retrying...');
+            return { continue: true, decrementIteration: true };
+        }
+
+        if (AgentErrorHandler.isSensitiveContentError(error)) {
+            if (this.stateManager.hasExceededSensitiveContentRetries()) {
+                this.broadcast('agent:error', `内容安全拦截次数过多，请修改输入后重试。`);
+                return { continue: false };
+            }
+
+            const retryCount = this.stateManager.incrementSensitiveContentRetries();
+            await AgentErrorHandler.handleRateLimit(retryCount);
+
+            this.stateManager.addToHistory({
+                role: 'user',
+                content: AgentErrorHandler.buildSensitiveContentRetryMessage()
+            });
+            this.notifyUpdate();
+            this.stateManager.manageHistory();
+
+            return { continue: true };
+        }
+
+        return { continue: false };
+    }
+
+    private handleProcessingError(error: unknown): void {
+        logs.agent.error('Agent Loop Error:', error);
+        this.eventSink?.logEvent('error', {
+            message: (error as Error).message || String(error),
+            status: (error as AgentError).status
+        });
+        this.broadcast('agent:error', AgentErrorHandler.formatErrorMessage(error));
+    }
+
+    private async requestConfirmation(tool: string, description: string, args: Record<string, unknown>): Promise<boolean> {
+        const path = (args?.path || args?.cwd) as string | undefined;
+
+        if (configStore.hasPermission(tool, path)) return true;
+        if (tool === 'write_file' && path && permissionManager.isPathAuthorized(path)) return true;
+
+        const id = `confirm-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const token = createPendingConfirmation(id, tool, path || '');
+        return this.uiBridge.requestConfirmation(id, { id, tool, description, args, token });
+    }
+
+    private async checkToolPermission(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+        const path = (args?.path || args?.cwd) as string | undefined;
+        if (configStore.hasPermission(toolName, path)) return true;
+        if (toolName === 'write_file' && path && permissionManager.isPathAuthorized(path)) return true;
+        logs.agent.warn(`[executeToolDirectly] Permission denied for ${toolName}`);
+        return false;
+    }
+
+    private buildTodoReminder(analysis: { complexity: string; reason: string; estimatedSteps?: number }): string {
+        return `<SYSTEM REMINDER>
+COMPLEX TASK DETECTED - TODO_WRITE USAGE REQUIRED
+Task Analysis: Complexity: ${analysis.complexity.toUpperCase()}, Reason: ${analysis.reason}
+ACTION REQUIRED: You MUST use the todo_write tool BEFORE proceeding.
+</SYSTEM REMINDER>`;
     }
 
     private summarizeUserInput(input: string | { content: string, images: string[] }) {
         if (typeof input === 'string') {
             return { textPreview: input.slice(0, 2000), textLength: input.length, imageCount: 0 };
         }
-        const text = input.content || '';
-        const imageCount = Array.isArray(input.images) ? input.images.length : 0;
-        return { textPreview: text.slice(0, 2000), textLength: text.length, imageCount };
+        return {
+            textPreview: (input.content || '').slice(0, 2000),
+            textLength: (input.content || '').length,
+            imageCount: input.images?.length || 0
+        };
     }
 
-    private async runLoop() {
-        let keepGoing = true;
-        let iterationCount = 0;
-        const MAX_ITERATIONS = 30;
-        const loopStartTime = performance.now();
-
-        while (keepGoing && iterationCount < MAX_ITERATIONS) {
-            iterationCount++;
-            logs.agent.info(`[AgentRuntime] Loop iteration: ${iterationCount}`);
-            if (this.abortController?.signal.aborted) break;
-
-            const configuredWorkMode = configStore.get('workMode') || 'cowork';
-            if (this.workMode !== configuredWorkMode) {
-                this.workMode = configuredWorkMode;
-                // Cache will be invalidated automatically by setWorkMode
-            }
-
-            // Get Tools from Registry (with caching)
-            const tools = await this.getToolsIfNeeded();
-            // Get System Prompt from Service (with caching)
-            const systemPrompt = this.getSystemPromptIfNeeded();
-
-            logs.agent.info('Sending request to API...');
-            logs.agent.info('Provider:', this.provider);
-            logs.agent.info('Model:', this.model);
-            logs.agent.info('Base URL:', this.llmProvider.getBaseURL());
-
-            try {
-                if (!String(this.apiKey || '').trim()) {
-                    const e: AgentError = new Error('API Key 未配置，请在设置中为当前供应商填写 API Key');
-                    e.status = 401;
-                    throw e;
-                }
-                if (!String(this.model || '').trim()) {
-                    const e: AgentError = new Error('模型未配置，请在设置中选择或填写模型');
-                    e.status = 400;
-                    throw e;
-                }
-                if (!String(this.apiUrl || '').trim()) {
-                    const e: AgentError = new Error('Base URL 未配置，请在设置中填写 Base URL');
-                    e.status = 400;
-                    throw e;
-                }
-
-                this.setStage('THINKING', { iteration: iterationCount });
-                const finalContent = await generateResponse(
-                    this.provider as ProviderId,
-                    {
-                        model: this.model,
-                        systemPrompt,
-                        messages: this.history,
-                        tools,
-                        maxTokens: 4096,
-                        signal: this.abortController?.signal,
-                        onToken: (token) => this.broadcast('agent:stream-token', token)
-                    },
-                    {
-                        apiKey: this.apiKey,
-                        apiUrl: this.apiUrl,
-                    },
-                    this.llmProvider
-                );
-
-                if (this.abortController?.signal.aborted) return;
-
-                if (finalContent.length > 0) {
-                    const assistantMsg: Anthropic.MessageParam = { role: 'assistant', content: finalContent };
-                    this.history.push(assistantMsg);
-                    this.notifyUpdate();
-
-                    const toolUses = finalContent.filter(c => c.type === 'tool_use');
-                    if (toolUses.length > 0) {
-                        this.setStage('PLANNING', { toolCount: toolUses.length });
-                        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-                        for (const toolUse of toolUses) {
-                            if (toolUse.type !== 'tool_use') continue;
-
-                            logs.agent.info(`Executing tool: ${toolUse.name}`);
-                            this.broadcast('agent:tool-call', {
-                                callId: toolUse.id,
-                                name: toolUse.name,
-                                input: toolUse.input as Record<string, unknown>
-                            });
-                            this.setStage('EXECUTING', { tool: toolUse.name, toolUseId: toolUse.id });
-                            const startedAt = Date.now();
-                            this.currentToolUseId = toolUse.id; // Set ID for streaming context
-                            let result = "Tool execution failed or unknown tool.";
-
-                            try {
-                                result = await this.toolRegistry.executeTool(
-                                    toolUse.name,
-                                    toolUse.input as Record<string, unknown>
-                                );
-                                this.broadcast('agent:tool-result', {
-                                    callId: toolUse.id,
-                                    status: 'done'
-                                });
-                                this.eventSink?.logEvent('tool_executed', {
-                                    tool: toolUse.name,
-                                    toolUseId: toolUse.id,
-                                    durationMs: Date.now() - startedAt,
-                                    ok: true
-                                });
-                            } catch (toolErr: unknown) {
-                                result = `Error executing tool: ${(toolErr as Error).message}`;
-                                this.broadcast('agent:tool-result', {
-                                    callId: toolUse.id,
-                                    status: 'error',
-                                    error: (toolErr as Error).message
-                                });
-                                this.eventSink?.logEvent('tool_executed', {
-                                    tool: toolUse.name,
-                                    toolUseId: toolUse.id,
-                                    durationMs: Date.now() - startedAt,
-                                    ok: false,
-                                    error: (toolErr as Error).message
-                                });
-                            }
-                            this.currentToolUseId = null; // Clear ID after execution
-
-                            toolResults.push({
-                                type: 'tool_result',
-                                tool_use_id: toolUse.id,
-                                content: result
-                            });
-                        }
-
-                        this.history.push({ role: 'user', content: toolResults });
-                        this.notifyUpdate();
-                        this.setStage('THINKING', { iteration: iterationCount });
-                    } else {
-                        this.setStage('FEEDBACK');
-                        keepGoing = false;
-                    }
-                } else {
-                    this.setStage('FEEDBACK');
-                    keepGoing = false;
-                }
-
-            } catch (loopError: unknown) {
-                const loopErr = loopError as { status?: number; message?: string };
-                logs.agent.error("Agent Loop detailed error:", loopError);
-
-                // Handle Rate Limit (429)
-                if (loopErr.status === 429) {
-                    logs.agent.info("Rate limit hit, waiting 5s before retry...");
-                    this.broadcast('agent:status', 'Rate limit hit, retrying in 5s...');
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                    iterationCount--; // Don't count this as an iteration
-                    continue;
-                }
-
-                // Handle Sensitive Content Error (1027) with retry limit and exponential backoff
-                if (loopErr.status === 500 && this.isSensitiveContentError(loopErr)) {
-                    if (this.sensitiveContentRetries >= this.MAX_SENSITIVE_CONTENT_RETRIES) {
-                        logs.agent.error(`[AgentRuntime] Maximum sensitive content retries (${this.MAX_SENSITIVE_CONTENT_RETRIES}) exceeded`);
-                        this.broadcast('agent:error', `内容安全拦截次数过多（${this.MAX_SENSITIVE_CONTENT_RETRIES}次），请修改输入后重试。`);
-                        throw new Error('Maximum sensitive content retries exceeded');
-                    }
-
-                    this.sensitiveContentRetries++;
-                    logs.agent.info(`[AgentRuntime] Caught sensitive content error (${this.sensitiveContentRetries}/${this.MAX_SENSITIVE_CONTENT_RETRIES}), asking Agent to retry...`);
-
-                    // Exponential backoff: wait longer between retries to avoid overwhelming the filter
-                    const backoffDelay = Math.min(1000 * Math.pow(2, this.sensitiveContentRetries - 1), 5000);
-                    logs.agent.info(`[AgentRuntime] Applying exponential backoff: waiting ${backoffDelay}ms before retry`);
-                    await new Promise(resolve => setTimeout(resolve, backoffDelay));
-
-                    // Add a system-like user message to prompt the agent to fix its output
-                    this.history.push({
-                        role: 'user',
-                        content: `[SYSTEM ERROR] Your previous response was blocked by the safety filter (Error Code 1027: output new_sensitive). \n\nThis usually means the generated content contained sensitive, restricted, or unsafe material.\n\nPlease generate a NEW response that:\n1. Addresses the user's request safely.\n2. Avoids the sensitive topic or phrasing that triggered the block.\n3. Acknowledges the issue briefly if necessary.`
-                    });
-                    this.notifyUpdate();
-
-                    // Manage history size to prevent unbounded growth from retry messages
-                    this.manageHistory();
-
-                    // Allow the loop to continue to the next iteration
-                    continue;
-                } else {
-                    // Re-throw other errors to be caught effectively by the outer handler
-                    throw loopError;
-                }
-            }
-        }
-
-        // Log loop completion time
-        const loopDuration = performance.now() - loopStartTime;
-        logs.agent.info(`[AgentRuntime] Loop completed in ${loopDuration.toFixed(2)}ms (${iterationCount} iterations)`);
-    }
-
-    private setStage(stage: AgentStage, detail?: unknown) {
-        if (this.stage === stage && detail === undefined) return;
-        this.stage = stage;
-        this.broadcast('agent:stage', { stage, detail });
-        this.eventSink?.logEvent('stage', { stage, detail });
-    }
-
-    // Build TodoWrite reminder message based on task analysis
-    private buildTodoReminder(analysis: { complexity: string; reason: string; estimatedSteps?: number }): string {
-        return `<SYSTEM REMINDER>
-================================================================================
-COMPLEX TASK DETECTED - TODO_WRITE USAGE REQUIRED
-================================================================================
-
-Task Analysis:
-• Complexity: ${analysis.complexity.toUpperCase()}
-• Reason: ${analysis.reason}
-• Estimated Steps: ${analysis.estimatedSteps || 'N/A'}
-
-ACTION REQUIRED:
-You MUST use the todo_write tool BEFORE proceeding with any other tools.
-
-Example format:
-<todo_write>
-{
-  "action": "add",
-  "todos": [
-    {"content": "First step", "status": "pending", "activeForm": "Starting first step"},
-    {"content": "Second step", "status": "pending", "activeForm": "Working on second step"}
-  ]
-}
-</todo_write>
-
-This helps users track progress on complex workflows.
-================================================================================
-</SYSTEM REMINDER>`;
-    }
-
-    // Broadcast to all windows
-    private broadcast(channel: string, data: unknown) {
-        for (const win of this.windows) {
-            if (!win.isDestroyed()) {
-                win.webContents.send(channel, data);
-            }
-        }
-    }
-
-    private notifyUpdate() {
-        this.broadcast('agent:history-update', this.history);
-    }
-
-    private async requestConfirmation(tool: string, description: string, args: Record<string, unknown>): Promise<boolean> {
-        // Extract path from args if available
-        const path = (args?.path || args?.cwd) as string | undefined;
-
-        // 1. Check if permission is already explicitly granted (Remembered by user)
-        if (configStore.hasPermission(tool, path)) {
-            logs.agent.info(`[AgentRuntime] Auto-approved ${tool} (saved permission)`);
-            return true;
-        }
-
-        // 2. Auto-approve standard file writes in authorized folders
-        if (tool === 'write_file' && path && permissionManager.isPathAuthorized(path)) {
-            logs.agent.info(`[AgentRuntime] Auto-approved ${tool} (authorized folder: ${path})`);
-            return true;
-        }
-
-        // 3. For other operations (like run_command), we still require confirmation 
-        // unless they were explicitly "remembered" in step 1.
-
-        const id = `confirm-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const token = createPendingConfirmation(id, tool, path || '');
-        return new Promise((resolve) => {
-            this.pendingConfirmations.set(id, { resolve });
-            this.broadcast('agent:confirm-request', { id, tool, description, args, token });
-        });
-    }
-
-    public handleConfirmResponseWithRemember(id: string, approved: boolean, remember: boolean): void {
-        const pending = this.pendingConfirmations.get(id);
-        if (pending) {
-            if (approved && remember) {
-                // Future: We would extract tool and path here and save to configStore
-                // For now this is just a placeholder logic from before
-            }
-            pending.resolve(approved);
-            this.pendingConfirmations.delete(id);
-        }
-    }
-
-    public abort() {
-        this.abortController?.abort();
-    }
-
-    /**
-     * Execute a tool directly without LLM intervention
-     * Used by scheduled tasks for direct tool execution
-     */
-    async executeToolDirectly(toolName: string, args: Record<string, unknown>): Promise<string> {
-        logs.agent.info(`[executeToolDirectly] Executing tool: ${toolName}`);
-
-        // Check tool permission
-        const hasPermission = await this.checkToolPermission(toolName, args);
-        if (!hasPermission) {
-            throw new Error(`Permission denied for tool: ${toolName}`);
-        }
-
-        try {
-            // Execute the tool
-            const result = await this.toolRegistry.executeTool(toolName, args);
-            return result;
-        } catch (error) {
-            logs.agent.error(`[executeToolDirectly] Error executing ${toolName}:`, error);
-            throw error;
-        }
-    }
-
-    /**
-     * Check if tool execution requires permission
-     */
-    private async checkToolPermission(toolName: string, args: Record<string, unknown>): Promise<boolean> {
-        // Extract path from args if available
-        const path = (args?.path || args?.cwd) as string | undefined;
-
-        // 1. Check if permission is already explicitly granted
-        if (configStore.hasPermission(toolName, path)) {
-            return true;
-        }
-
-        // 2. Auto-approve standard file writes in authorized folders
-        if (toolName === 'write_file' && path && permissionManager.isPathAuthorized(path)) {
-            return true;
-        }
-
-        // 3. For scheduled tasks, we don't want to show confirmation dialogs
-        // so we check if there's a saved permission
-        if (configStore.hasPermission(toolName, path)) {
-            return true;
-        }
-
-        // 4. Deny if no permission found
-        logs.agent.warn(`[executeToolDirectly] Permission denied for ${toolName} at path ${path || '(any)'}`);
-        return false;
-    }
-
-    /**
-     * Check if an error is a sensitive content error (1027)
-     * More robust than simple string matching
-     */
-    private isSensitiveContentError(error: { status?: number; message?: string } | unknown): boolean {
-        const err = error as { status?: number; message?: string };
-        if (err.status !== 500) return false;
-
-        const errorStr = JSON.stringify(error);
-        const messageStr = String(err.message || '');
-
-        // Check for various indicators of sensitive content errors
-        const indicators = [
-            '1027',
-            'sensitive',
-            'new_sensitive',
-            'content_filter',
-            'safety_filter'
-        ];
-
-        return indicators.some(indicator =>
-            messageStr.toLowerCase().includes(indicator) ||
-            errorStr.toLowerCase().includes(indicator)
-        );
-    }
+    // Broadcast helpers
+    public broadcast(channel: string, data: unknown) { this.uiBridge.broadcast(channel, data); }
+    private notifyUpdate() { this.uiBridge.notifyHistoryUpdate(this.stateManager.getHistory()); }
 }

@@ -21,6 +21,67 @@ let agent: AgentRuntime | null = null;
 const TOKEN_SECRET = process.env.PERMISSION_TOKEN_SECRET || crypto.randomBytes(32).toString('hex');
 
 /**
+ * SECURITY: Session encryption key for IPC token encryption
+ * Regenerated on each app start to prevent replay attacks
+ */
+const SESSION_ENCRYPTION_KEY = crypto.randomBytes(32);
+
+/**
+ * SECURITY: Encrypt token for IPC transmission
+ * Uses AES-256-GCM for authenticated encryption
+ */
+function encryptToken(token: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', SESSION_ENCRYPTION_KEY, iv);
+
+  const encrypted = Buffer.concat([
+    cipher.update(token, 'utf8'),
+    cipher.final()
+  ]);
+
+  const authTag = cipher.getAuthTag();
+
+  // Return format: iv:authTag:encrypted (all base64)
+  return [
+    iv.toString('base64'),
+    authTag.toString('base64'),
+    encrypted.toString('base64')
+  ].join(':');
+}
+
+/**
+ * SECURITY: Decrypt token from IPC transmission
+ * Verifies authenticity using GCM auth tag
+ */
+function decryptToken(encryptedToken: string): string | null {
+  try {
+    const parts = encryptedToken.split(':');
+    if (parts.length !== 3) {
+      logs.ipc.warn('[Security] Invalid encrypted token format');
+      return null;
+    }
+
+    const [ivB64, authTagB64, dataB64] = parts;
+    const iv = Buffer.from(ivB64, 'base64');
+    const authTag = Buffer.from(authTagB64, 'base64');
+    const data = Buffer.from(dataB64, 'base64');
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', SESSION_ENCRYPTION_KEY, iv);
+    decipher.setAuthTag(authTag);
+
+    const decrypted = Buffer.concat([
+      decipher.update(data),
+      decipher.final()
+    ]);
+
+    return decrypted.toString('utf8');
+  } catch (error) {
+    logs.ipc.error('[Security] Token decryption failed:', error);
+    return null;
+  }
+}
+
+/**
  * SECURITY: Pending confirmation requests with tokens
  */
 interface PendingConfirmation {
@@ -171,6 +232,7 @@ export function getAgentInstance(): AgentRuntime | null {
 /**
  * SECURITY: Create a pending confirmation request with token
  * This should be called when agent requests user confirmation
+ * @returns Encrypted token for IPC transmission
  */
 export function createPendingConfirmation(
   id: string,
@@ -191,13 +253,14 @@ export function createPendingConfirmation(
 
   // Clean up old entries if too many
   if (pendingConfirmations.size > 100) {
-    const oldestId = pendingConfirmations.keys().next().value;
+    const oldestId = pendingConfirmations.keys().next().value as string;
     pendingConfirmations.delete(oldestId);
   }
 
   logs.ipc.info(`[Permission] Created confirmation token for ${tool}:${path}`);
 
-  return token;
+  // SECURITY: Encrypt token before returning for IPC transmission
+  return encryptToken(token);
 }
 
 /**
@@ -285,7 +348,27 @@ export function registerAgentHandlers(): void {
           return { success: false, error: 'Token required for permission persistence' };
         }
 
-        const verification = verifyConfirmationToken(id, token);
+        // SECURITY: Decrypt token received from IPC
+        const decryptedToken = decryptToken(token);
+        if (!decryptedToken) {
+          logPermissionChange({
+            timestamp: Date.now(),
+            action: 'verify_fail',
+            tool,
+            path,
+            reason: 'Token decryption failed'
+          });
+
+          logs.ipc.warn('[Permission] Token decryption failed');
+          agent?.handleConfirmResponse(id, approved);
+          return {
+            success: false,
+            error: 'Invalid token',
+            message: 'Permission not persisted due to token verification failure'
+          };
+        }
+
+        const verification = verifyConfirmationToken(id, decryptedToken);
         if (!verification.ok) {
           logs.ipc.warn(`[Permission] Token verification failed: ${verification.error}`);
 

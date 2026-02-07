@@ -1,29 +1,26 @@
 import fs from 'fs/promises';
 import path from 'path';
-// import { exec } from 'child_process';
-// import { promisify } from 'util';
-
-// const execAsync = promisify(exec);
+import { parseCommandToSafe } from '../security/CommandSecurity';
 
 // Type definitions for FileSystemTools
 export interface ToolInput {
-  [key: string]: unknown;
+    [key: string]: unknown;
 }
 
 export interface ToolResult {
-  success: boolean;
-  output?: string;
-  error?: string;
-  metadata?: Record<string, unknown>;
+    success: boolean;
+    output?: string;
+    error?: string;
+    metadata?: Record<string, unknown>;
 }
 
 export interface FilePathInput {
-  path: string;
+    path: string;
 }
 
 export interface CommandInput {
-  command: string;
-  cwd?: string;
+    command: string;
+    cwd?: string;
 }
 
 export type StreamCallback = (chunk: string, type: 'stdout' | 'stderr') => void;
@@ -83,9 +80,9 @@ export class FileSystemTools {
     async readFile(args: { path: string }) {
         try {
             const content = await fs.readFile(args.path, 'utf-8');
-            return `Successfully read file ${args.path}:\n${content}`;
+            return `Successfully read file ${args.path}: \n${content} `;
         } catch (error: unknown) {
-            return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
+            return `Error reading file: ${error instanceof Error ? error.message : String(error)} `;
         }
     }
 
@@ -93,9 +90,9 @@ export class FileSystemTools {
         try {
             await fs.mkdir(path.dirname(args.path), { recursive: true });
             await fs.writeFile(args.path, args.content, 'utf-8');
-            return `Successfully wrote to ${args.path}`;
+            return `Successfully wrote to ${args.path} `;
         } catch (error: unknown) {
-            return `Error writing file: ${error instanceof Error ? error.message : String(error)}`;
+            return `Error writing file: ${error instanceof Error ? error.message : String(error)} `;
         }
     }
 
@@ -103,11 +100,11 @@ export class FileSystemTools {
         try {
             const items = await fs.readdir(args.path, { withFileTypes: true });
             const result = items.map(item =>
-                `${item.isDirectory() ? '[DIR]' : '[FILE]'} ${item.name}`
+                `${item.isDirectory() ? '[DIR]' : '[FILE]'} ${item.name} `
             ).join('\n');
-            return `Directory contents of ${args.path}:\n${result}`;
+            return `Directory contents of ${args.path}: \n${result} `;
         } catch (error: unknown) {
-            return `Error listing directory: ${error instanceof Error ? error.message : String(error)}`;
+            return `Error listing directory: ${error instanceof Error ? error.message : String(error)} `;
         }
     }
 
@@ -122,16 +119,26 @@ export class FileSystemTools {
     ): Promise<string> {
         const workingDir = args.cwd || defaultCwd;
 
-        // Split command into cmd and args for spawn, but spawn with shell: true is easier for complex commands
+        // SECURITY: Use safe command execution with streaming
         const { spawn } = await import('child_process');
+
+        // Parse command to extract base command and args
+        const parsed = parseCommandToSafe(args.command);
+        const useShell = /[|&;<>()$`\\"']/.test(args.command); // Detect shell features
 
         return new Promise((resolve) => {
             console.log(`[FileSystemTools] Executing command (stream): ${args.command} in ${workingDir}`);
 
-            const child = spawn(args.command, {
-                cwd: workingDir,
-                shell: process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'
-            });
+            // SECURITY: Use parameterized execution when possible
+            const child = useShell
+                ? spawn(args.command, {
+                    cwd: workingDir,
+                    shell: process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'
+                })
+                : spawn(parsed.command, parsed.args || [], {
+                    cwd: workingDir,
+                    shell: false  // SECURITY: Prevent shell interpretation
+                });
 
             const timeoutMs = 120_000;
             const maxOutputChars = 1_000_000;
@@ -162,13 +169,13 @@ export class FileSystemTools {
                     }
                     const truncated = fullOutput.slice(0, maxOutputChars);
                     settle(
-                        `Command '${args.command}' executed in ${workingDir}.\nExit Code: null\n\nOutput (truncated):\n${truncated}\n\n[Output truncated and process terminated due to hard limit.]`
+                        `Command '${args.command}' executed in ${workingDir}.\\nExit Code: null\\n\\nOutput (truncated):\\n${truncated}\\n\\n[Output truncated and process terminated due to hard limit.]`
                     );
                 }
             };
 
-            child.stdout.on('data', (data) => handleOutput(data, 'stdout'));
-            child.stderr.on('data', (data) => handleOutput(data, 'stderr'));
+            child.stdout?.on('data', (data) => handleOutput(data, 'stdout'));
+            child.stderr?.on('data', (data) => handleOutput(data, 'stderr'));
 
             timeoutHandle = setTimeout(() => {
                 try {
@@ -177,21 +184,18 @@ export class FileSystemTools {
                     void 0;
                 }
                 settle(
-                    `Command '${args.command}' executed in ${workingDir}.\nExit Code: null\n\nOutput:\n${fullOutput}\n\n[Process terminated due to hard timeout: ${timeoutMs}ms]`
+                    `Command '${args.command}' executed in ${workingDir}.\\nExit Code: null\\n\\nOutput:\\n${fullOutput}\\n\\n[Process terminated due to hard timeout: ${timeoutMs}ms]`
                 );
             }, timeoutMs);
 
             child.on('error', (err) => {
                 const errorMsg = `Failed to start command: ${err.message}`;
-                fullOutput += `\n${errorMsg}`;
-                settle(`Command execution error:\n${fullOutput}`);
+                fullOutput += `\\n${errorMsg}`;
+                settle(`Command execution error:\\n${fullOutput}`);
             });
 
             child.on('close', (code) => {
-                // let resultSummary = `\n[Process exited with code ${code}]`;
-                // Add command info to the top of the context block returned to LLM, 
-                // but for streaming UI we just stream raw output.
-                const finalResponse = `Command '${args.command}' executed in ${workingDir}.\nExit Code: ${code}\n\nOutput:\n${fullOutput}`;
+                const finalResponse = `Command '${args.command}' executed in ${workingDir}.\\nExit Code: ${code}\\n\\nOutput:\\n${fullOutput}`;
                 settle(finalResponse);
             });
         });
