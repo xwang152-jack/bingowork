@@ -199,7 +199,7 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
 
     // Memoize content wrapper class
     const contentWrapperClass = useMemo(() => {
-        return `inline-block text-left ${
+        return `${
             isUser
                 ? 'bg-orange-50 text-stone-800 rounded-3xl rounded-tr-sm'
                 : 'bg-white text-stone-800 rounded-3xl rounded-tl-sm border border-stone-200/60 shadow-sm'
@@ -289,7 +289,7 @@ interface StreamingMessageProps {
 
 const StreamingMessage = memo(function StreamingMessage({ text, isDark }: StreamingMessageProps) {
     const avatarClass = `flex-shrink-0 w-11 h-11 rounded-2xl flex items-center justify-center bg-stone-100 text-stone-600 shadow-sm`;
-    const contentWrapperClass = `inline-block text-left bg-white text-stone-800 rounded-3xl rounded-tl-sm border border-stone-200/60 px-5 py-4 shadow-sm`;
+    const contentWrapperClass = `bg-white text-stone-800 rounded-3xl rounded-tl-sm border border-stone-200/60 px-5 py-4 shadow-sm`;
 
     return (
         <div className="flex gap-4">

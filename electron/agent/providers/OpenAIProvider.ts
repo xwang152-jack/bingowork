@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import type { ChatCompletionContentPart, ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { BaseLLMProvider, StreamChatParams } from './BaseLLMProvider';
+import { createTokenBuffer } from './TokenBuffer';
 
 function normalizeOpenAIBaseURL(raw: string): string {
     const trimmed = String(raw || '').trim().replace(/\/+$/, '');
@@ -149,68 +150,82 @@ export class OpenAIProvider extends BaseLLMProvider {
             }
         }));
 
-        const stream = await this.client.chat.completions.create({
-            model,
-            messages: openAIMessages,
-            tools: openAITools,
-            stream: true,
-            max_tokens: maxTokens
-        });
+        // Create token buffer for batched IPC communication
+        const tokenBuffer = onToken ? createTokenBuffer(onToken, 10, 50) : null;
 
-        const finalContent: Anthropic.ContentBlock[] = [];
-        let textBuffer = '';
-        const toolCallsMap = new Map<number, { id: string; name: string; arguments: string }>();
+        try {
+            const stream = await this.client.chat.completions.create({
+                model,
+                messages: openAIMessages,
+                tools: openAITools,
+                stream: true,
+                max_tokens: maxTokens
+            });
 
-        for await (const chunk of stream) {
-            if (signal?.aborted) {
-                stream.controller.abort();
-                break;
-            }
+            const finalContent: Anthropic.ContentBlock[] = [];
+            let textBuffer = '';
+            const toolCallsMap = new Map<number, { id: string; name: string; arguments: string }>();
 
-            const delta = chunk.choices?.[0]?.delta;
-            if (!delta) continue;
+            for await (const chunk of stream) {
+                if (signal?.aborted) {
+                    stream.controller.abort();
+                    break;
+                }
 
-            if (delta.content) {
-                textBuffer += delta.content;
-                onToken?.(delta.content);
-            }
+                const delta = chunk.choices?.[0]?.delta;
+                if (!delta) continue;
 
-            if (delta.tool_calls) {
-                for (const tc of delta.tool_calls) {
-                    const index = tc.index;
-                    if (!toolCallsMap.has(index)) {
-                        toolCallsMap.set(index, { id: '', name: '', arguments: '' });
+                if (delta.content) {
+                    textBuffer += delta.content;
+                    // Use token buffer for batched sending
+                    tokenBuffer?.add(delta.content);
+                }
+
+                if (delta.tool_calls) {
+                    // Flush text buffer before starting tool calls
+                    tokenBuffer?.flush();
+                    for (const tc of delta.tool_calls) {
+                        const index = tc.index;
+                        if (!toolCallsMap.has(index)) {
+                            toolCallsMap.set(index, { id: '', name: '', arguments: '' });
+                        }
+                        const current = toolCallsMap.get(index)!;
+                        if (tc.id) current.id = tc.id;
+                        if (tc.function?.name) current.name = tc.function.name;
+                        if (tc.function?.arguments) current.arguments += tc.function.arguments;
                     }
-                    const current = toolCallsMap.get(index)!;
-                    if (tc.id) current.id = tc.id;
-                    if (tc.function?.name) current.name = tc.function.name;
-                    if (tc.function?.arguments) current.arguments += tc.function.arguments;
                 }
             }
-        }
 
-        if (textBuffer) {
-            finalContent.push({ type: 'text', text: textBuffer, citations: null });
-        }
+            // Flush remaining tokens
+            tokenBuffer?.flush();
 
-        for (const tc of toolCallsMap.values()) {
-            try {
-                finalContent.push({
-                    type: 'tool_use',
-                    id: tc.id,
-                    name: tc.name,
-                    input: JSON.parse(tc.arguments)
-                });
-            } catch {
-                finalContent.push({
-                    type: 'tool_use',
-                    id: tc.id,
-                    name: tc.name,
-                    input: { error: 'Invalid JSON input', raw: tc.arguments }
-                });
+            if (textBuffer) {
+                finalContent.push({ type: 'text', text: textBuffer, citations: null });
             }
-        }
 
-        return finalContent;
+            for (const tc of toolCallsMap.values()) {
+                try {
+                    finalContent.push({
+                        type: 'tool_use',
+                        id: tc.id,
+                        name: tc.name,
+                        input: JSON.parse(tc.arguments)
+                    });
+                } catch {
+                    finalContent.push({
+                        type: 'tool_use',
+                        id: tc.id,
+                        name: tc.name,
+                        input: { error: 'Invalid JSON input', raw: tc.arguments }
+                    });
+                }
+            }
+
+            return finalContent;
+        } finally {
+            // Ensure token buffer is flushed and cleaned up
+            tokenBuffer?.destroy();
+        }
     }
 }

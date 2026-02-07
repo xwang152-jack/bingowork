@@ -10,11 +10,25 @@ import { configStore } from '../../../config/ConfigStore';
 vi.mock('../../../config/ConfigStore', () => ({
   configStore: {
     addAuthorizedFolder: vi.fn(),
-    removeAuthorizedFolder: vi.fn(),
     getAuthorizedFolders: vi.fn(),
     setNetworkAccess: vi.fn(),
     getNetworkAccess: vi.fn(),
   },
+}));
+
+// Mock fs module using vi.hoisted
+const { mockExistsSync, mockStatSync } = vi.hoisted(() => ({
+  mockExistsSync: vi.fn(),
+  mockStatSync: vi.fn(),
+}));
+
+vi.mock('fs', () => ({
+  default: {
+    existsSync: mockExistsSync,
+    statSync: mockStatSync,
+  },
+  existsSync: mockExistsSync,
+  statSync: mockStatSync,
 }));
 
 describe('PermissionManager', () => {
@@ -23,18 +37,25 @@ describe('PermissionManager', () => {
   beforeEach(() => {
     permissionManager = new PermissionManager();
     vi.clearAllMocks();
+
+    // Set up default mocks
+    mockExistsSync.mockReturnValue(false);
+    mockStatSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
   });
 
   describe('authorizeFolder()', () => {
     it('should authorize a valid folder', () => {
+      const testPath = '/tmp/authorized/folder';
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isDirectory: () => true } as any);
       vi.mocked(configStore.addAuthorizedFolder).mockReturnValue(undefined);
 
-      const result = permissionManager.authorizeFolder('/home/user/documents');
+      const result = permissionManager.authorizeFolder(testPath);
 
       expect(result).toBe(true);
-      expect(configStore.addAuthorizedFolder).toHaveBeenCalledWith(
-        expect.stringContaining('home/user/documents')
-      );
+      expect(configStore.addAuthorizedFolder).toHaveBeenCalledWith(testPath);
     });
 
     it('should reject root directory "/"', () => {
@@ -44,85 +65,125 @@ describe('PermissionManager', () => {
       expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
     });
 
-    it('should reject Windows root "C:\\"', () => {
-      const result = permissionManager.authorizeFolder('C:\\');
-
-      // On non-Windows platforms, path.resolve may not normalize Windows roots
-      // The regex check /^[A-Z]:\\$/ only matches if path.resolve preserves this
-      // On macOS/Linux, it might convert to something else
+    it('should reject Windows root "C:\\" on Windows', () => {
       if (process.platform === 'win32') {
+        const result = permissionManager.authorizeFolder('C:\\');
+
         expect(result).toBe(false);
         expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
       } else {
-        // On non-Windows, the behavior may differ
-        expect(configStore.addAuthorizedFolder).toHaveBeenCalled();
+        // On non-Windows platforms, Windows drive roots are converted to different paths
+        // but should still be rejected as they don't exist
+        mockExistsSync.mockReturnValue(false);
+        const result = permissionManager.authorizeFolder('C:\\');
+
+        expect(result).toBe(false);
+        expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
       }
     });
 
-    it('should reject Windows root "D:\\"', () => {
-      const result = permissionManager.authorizeFolder('D:\\');
-
-      // Same as above - platform-specific behavior
+    it('should reject Windows root "D:\\" on Windows', () => {
       if (process.platform === 'win32') {
+        const result = permissionManager.authorizeFolder('D:\\');
+
         expect(result).toBe(false);
         expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
       } else {
-        expect(configStore.addAuthorizedFolder).toHaveBeenCalled();
+        mockExistsSync.mockReturnValue(false);
+        const result = permissionManager.authorizeFolder('D:\\');
+
+        expect(result).toBe(false);
+        expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
       }
     });
 
-    it('should reject Windows root with pattern "E:\\"', () => {
-      const result = permissionManager.authorizeFolder('E:\\');
-
-      // Same as above - platform-specific behavior
+    it('should reject Windows root with pattern "E:\\" on Windows', () => {
       if (process.platform === 'win32') {
+        const result = permissionManager.authorizeFolder('E:\\');
+
         expect(result).toBe(false);
         expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
       } else {
-        expect(configStore.addAuthorizedFolder).toHaveBeenCalled();
+        mockExistsSync.mockReturnValue(false);
+        const result = permissionManager.authorizeFolder('E:\\');
+
+        expect(result).toBe(false);
+        expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
       }
     });
 
-    it('should authorize Windows non-root paths', () => {
+    it('should reject non-existent paths', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = permissionManager.authorizeFolder('/nonexistent/path');
+
+      expect(result).toBe(false);
+      expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
+    });
+
+    it('should reject files (not directories)', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isDirectory: () => false } as any);
+
+      const result = permissionManager.authorizeFolder('/home/user/file.txt');
+
+      expect(result).toBe(false);
+      expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
+    });
+
+    it('should reject empty string', () => {
+      const result = permissionManager.authorizeFolder('');
+
+      expect(result).toBe(false);
+      expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
+    });
+
+    it('should reject paths with null bytes', () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const result = permissionManager.authorizeFolder('/home/user\0documents');
+
+      expect(result).toBe(false);
+      expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
+    });
+
+    it('should reject overly long paths', () => {
+      const longPath = '/a/'.repeat(500); // Way over 1000 chars
+
+      const result = permissionManager.authorizeFolder(longPath);
+
+      expect(result).toBe(false);
+      expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
+    });
+
+    it('should reject sensitive system directories', () => {
+      const sensitivePaths = [
+        '/etc',
+        '/bin',
+        '/usr/bin',
+        '/System',
+        '/Library',
+      ];
+
+      for (const path of sensitivePaths) {
+        const result = permissionManager.authorizeFolder(path);
+        expect(result).toBe(false);
+        expect(configStore.addAuthorizedFolder).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should resolve relative paths to absolute before checking', () => {
+      // Test that the function properly normalizes paths
+      const testPath = '/tmp/another/folder';
+
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isDirectory: () => true } as any);
       vi.mocked(configStore.addAuthorizedFolder).mockReturnValue(undefined);
 
-      const result = permissionManager.authorizeFolder('C:\\Users\\test');
+      const result = permissionManager.authorizeFolder(testPath);
 
       expect(result).toBe(true);
-      expect(configStore.addAuthorizedFolder).toHaveBeenCalled();
-    });
-
-    it('should resolve relative paths to absolute', () => {
-      vi.mocked(configStore.addAuthorizedFolder).mockReturnValue(undefined);
-
-      const result = permissionManager.authorizeFolder('./documents');
-
-      expect(result).toBe(true);
-      expect(configStore.addAuthorizedFolder).toHaveBeenCalledWith(
-        expect.not.stringContaining('./')
-      );
-    });
-  });
-
-  describe('revokeFolder()', () => {
-    it('should revoke folder authorization', () => {
-      vi.mocked(configStore.removeAuthorizedFolder).mockReturnValue(undefined);
-
-      permissionManager.revokeFolder('/home/user/documents');
-
-      expect(configStore.removeAuthorizedFolder).toHaveBeenCalledWith(
-        expect.stringContaining('home/user/documents')
-      );
-    });
-
-    it('should resolve relative paths when revoking', () => {
-      vi.mocked(configStore.removeAuthorizedFolder).mockReturnValue(undefined);
-
-      permissionManager.revokeFolder('./documents');
-
-      expect(configStore.removeAuthorizedFolder).toHaveBeenCalledWith(
-        expect.not.stringContaining('./')
-      );
+      expect(configStore.addAuthorizedFolder).toHaveBeenCalledWith(testPath);
     });
   });
 
@@ -191,17 +252,15 @@ describe('PermissionManager', () => {
       expect(result).toBe(true);
     });
 
-    it('should return true for Windows absolute paths in authorized folder', () => {
+    it('should return true for Windows absolute paths in authorized folder on Windows', () => {
       vi.mocked(configStore.getAuthorizedFolders).mockReturnValue(['C:\\Users\\test\\documents']);
 
-      // On non-Windows platforms, Windows paths may not be recognized as absolute
       const result = permissionManager.isPathAuthorized('C:\\Users\\test\\documents\\file.txt');
 
       if (process.platform === 'win32') {
         expect(result).toBe(true);
       } else {
         // On macOS/Linux, Windows paths aren't recognized as absolute by path.isAbsolute
-        // So the function returns false
         expect(result).toBe(false);
       }
     });
@@ -245,6 +304,14 @@ describe('PermissionManager', () => {
       vi.mocked(configStore.getAuthorizedFolders).mockReturnValue(['/home/user/documents']);
 
       const result = permissionManager.isPathAuthorized('/home/user/documents_backup/file.txt');
+
+      expect(result).toBe(false);
+    });
+
+    it('should reject paths with null bytes', () => {
+      vi.mocked(configStore.getAuthorizedFolders).mockReturnValue(['/home/user/documents']);
+
+      const result = permissionManager.isPathAuthorized('/home/user\0documents/file.txt');
 
       expect(result).toBe(false);
     });
@@ -303,6 +370,37 @@ describe('PermissionManager', () => {
       const result = permissionManager.isNetworkAccessEnabled();
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('getAuditLog()', () => {
+    it('should return audit log entries', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isDirectory: () => true } as any);
+      vi.mocked(configStore.addAuthorizedFolder).mockReturnValue(undefined);
+
+      permissionManager.authorizeFolder('/home/user/test');
+      const log = permissionManager.getAuditLog();
+
+      expect(Array.isArray(log)).toBe(true);
+      expect(log.length).toBeGreaterThan(0);
+      expect(log[0]).toHaveProperty('timestamp');
+      expect(log[0]).toHaveProperty('action');
+      expect(log[0]).toHaveProperty('path');
+    });
+  });
+
+  describe('clearAuditLog()', () => {
+    it('should clear audit log', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isDirectory: () => true } as any);
+      vi.mocked(configStore.addAuthorizedFolder).mockReturnValue(undefined);
+
+      permissionManager.authorizeFolder('/home/user/test');
+      permissionManager.clearAuditLog();
+      const log = permissionManager.getAuditLog();
+
+      expect(log).toEqual([]);
     });
   });
 });

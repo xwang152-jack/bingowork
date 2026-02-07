@@ -6,9 +6,10 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { initializeContainer, getGlobalContainer, Tokens, type ServiceResolver } from './registerServices';
+import { initializeContainer, getGlobalContainer, Tokens, ServiceResolver } from './registerServices';
 import type { TaskDatabase } from '../config/TaskDatabase';
 import type { AgentRuntime } from '../agent/AgentRuntime';
+import { logs } from '../utils/logger';
 
 /**
  * Application bootstrap state
@@ -38,30 +39,26 @@ export async function bootstrapApplication(
   }
 ): Promise<BootstrapState> {
   if (bootstrapState) {
-    console.warn('[Bootstrap] Application already initialized');
+    logs.ipc.warn('[Bootstrap] Application already initialized');
     return bootstrapState;
   }
 
-  console.log('[Bootstrap] Initializing application with DI container...');
+  logs.ipc.info('[Bootstrap] Initializing application with DI container...');
 
   // 1. Initialize DI container
   const container = initializeContainer();
-  const _services = container.registerInstance(
-    'bootstrap:services',
-    new ServiceResolverWrapper(container)
-  );
+  const services = new ServiceResolver(container);
 
   // 2. Initialize core services
   const taskDatabase = container.resolve<TaskDatabase>(Tokens.TaskDatabase);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const logger = container.resolve<any>(Tokens.Logger);
+  const logger = services.getLogger();
 
   logger.agent.info('[Bootstrap] DI container initialized');
 
   // 3. Create windows
   const windowState = createWindows({
     container,
-    services: new ServiceResolverWrapper(container),
+    services,
     taskDatabase,
     agentRuntime: null,
     mainWindow: null,
@@ -88,7 +85,7 @@ export async function bootstrapApplication(
   // 5. Store bootstrap state
   bootstrapState = {
     container,
-    services: new ServiceResolverWrapper(container),
+    services: new ServiceResolver(container),
     taskDatabase,
     agentRuntime,
     mainWindow: windowState.mainWindow,
@@ -129,75 +126,8 @@ export async function cleanupBootstrap(): Promise<void> {
     // Clear container
     container.clear();
   } catch (error) {
-    console.error('[Bootstrap] Cleanup error:', error);
+    logs.ipc.error('[Bootstrap] Cleanup error:', error);
   }
 
   bootstrapState = null;
-}
-
-/**
- * Wrapper for ServiceResolver to avoid circular dependency
- */
-class ServiceResolverWrapper {
-  constructor(private container: ReturnType<typeof getGlobalContainer>) {}
-
-  getConfig() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.ConfigStore);
-  }
-
-  getSessionStore() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.SessionStore);
-  }
-
-  getTaskDatabase() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.TaskDatabase);
-  }
-
-  getPermissionManager() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.PermissionManager);
-  }
-
-  getLogger() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.Logger);
-  }
-
-  getPerformanceMonitor() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.PerformanceMonitor);
-  }
-
-  getCacheManager() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.CacheManager);
-  }
-
-  getSkillManager() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.SkillManager);
-  }
-
-  getMCPService() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.MCPClientService);
-  }
-
-  getPromptService() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.PromptService);
-  }
-
-  getToolRegistry() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.ToolRegistry);
-  }
-
-  getAgentRuntime() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.container.resolve<any>(Tokens.AgentRuntime);
-  }
 }

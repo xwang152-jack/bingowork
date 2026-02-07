@@ -9,6 +9,11 @@ import { sessionStore } from '../../config/SessionStore';
 import { SESSION_CHANNELS } from '../../constants/IpcChannels';
 import { getAgentInstance } from './agentHandlers';
 import type { AgentMessage } from '../../types/ipc';
+import {
+  createSuccessResponse,
+  IpcErrorCode,
+  withIpcErrorHandling,
+} from '../types/IpcResponse';
 
 /**
  * Register all session-related IPC handlers
@@ -34,24 +39,26 @@ export function registerSessionHandlers(): void {
 
   // Load session
   ipcMain.handle(SESSION_CHANNELS.LOAD, (event, id: string) => {
-    const session = sessionStore.getSession(id);
-    if (!session) {
-      return { error: 'Session not found' };
-    }
-    sessionStore.setCurrentSession(id);
-    const agent = getAgentInstance();
-    if (agent) {
-      agent.loadHistory(session.messages);
-      // Explicitly send history update to the requesting window
-      // This ensures the frontend receives the loaded history even if
-      // the event listener was registered after loadHistory was called
-      setTimeout(() => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send('agent:history-update', session.messages);
-        }
-      }, 50);
-    }
-    return { success: true };
+    return withIpcErrorHandling(() => {
+      const session = sessionStore.getSession(id);
+      if (!session) {
+        throw new Error(`Session "${id}" not found`);
+      }
+      sessionStore.setCurrentSession(id);
+      const agent = getAgentInstance();
+      if (agent) {
+        agent.loadHistory(session.messages);
+        // Explicitly send history update to the requesting window
+        // This ensures the frontend receives the loaded history even if
+        // the event listener was registered after loadHistory was called
+        setTimeout(() => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send('agent:history-update', session.messages);
+          }
+        }, 50);
+      }
+      return createSuccessResponse();
+    }, IpcErrorCode.SESSION_NOT_FOUND)();
   });
 
   // Save session

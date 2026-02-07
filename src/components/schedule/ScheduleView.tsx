@@ -8,6 +8,7 @@ import { Clock } from 'lucide-react';
 import { ScheduleList } from './ScheduleList';
 import { ScheduleForm } from './ScheduleForm';
 import type { ScheduleTask } from '../../../electron/agent/schedule/types';
+import type { IpcResponse } from '../../../electron/ipc/types/IpcResponse';
 
 interface ScheduleViewProps {
   onClose?: () => void;
@@ -22,10 +23,21 @@ export function ScheduleView({ onClose: _onClose }: ScheduleViewProps) {
 
   const loadTasks = async () => {
     try {
-      const result = await window.ipcRenderer.invoke('schedule:list') as ScheduleTask[];
-      setTasks(result);
+      const result = await window.ipcRenderer.invoke('schedule:list') as IpcResponse<ScheduleTask[]>;
+      if (result && typeof result === 'object' && 'success' in result) {
+        if (result.success) {
+          setTasks(Array.isArray(result.data) ? result.data : []);
+        } else {
+          console.error('Failed to load tasks:', result.error);
+          setTasks([]);
+        }
+      } else {
+        // Fallback for legacy or unexpected format
+        setTasks(Array.isArray(result) ? (result as ScheduleTask[]) : []);
+      }
     } catch (error) {
       console.error('Failed to load tasks:', error);
+      setTasks([]);
     }
   };
 

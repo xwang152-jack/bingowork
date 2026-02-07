@@ -9,6 +9,7 @@ import { CONFIG_CHANNELS } from '../../constants/IpcChannels';
 import { getAgentInstance } from './agentHandlers';
 import { sessionStore } from '../../config/SessionStore';
 import type { TaskDatabase } from '../../config/TaskDatabase';
+import { logs } from '../../utils/logger';
 
 let taskDb: TaskDatabase | null = null;
 
@@ -83,7 +84,7 @@ export function registerConfigHandlers(): void {
         payload: configStore.getEffectiveConfig(),
       });
     } catch (e) {
-      console.error('Task DB config write failed:', e);
+      logs.ipc.error('Task DB config write failed:', e);
     }
 
     // Notify renderer that config has changed
@@ -129,7 +130,7 @@ export function registerConfigHandlers(): void {
         payload: configStore.getEffectiveConfig(),
       });
     } catch (e) {
-      console.error('Task DB config write failed:', e);
+      logs.ipc.error('Task DB config write failed:', e);
     }
 
     notifyConfigUpdate();
@@ -150,7 +151,7 @@ export function registerConfigHandlers(): void {
           provider: configStore.getProvider(),
           apiUrl: configStore.getApiUrl(),
         });
-        console.warn('No API Key found for provider:', configStore.getProvider());
+        logs.ipc.warn('No API Key found for provider:', configStore.getProvider());
       }
     } catch {
       // Ignore
@@ -178,5 +179,5 @@ function notifyConfigUpdate(): void {
 function reinitializeAgent(): void {
   // This is a placeholder - actual reinitialization logic
   // should be called from the main process
-  console.log('Agent reinitialization requested');
+  logs.ipc.info('Agent reinitialization requested');
 }

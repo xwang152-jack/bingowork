@@ -66,6 +66,16 @@ export class AgentRuntime {
     private skillsLoaded = false;
     private mcpLoaded = false;
 
+    // Performance optimization: Cache tools and system prompt to avoid rebuilding on every iteration
+    private cachedTools: Anthropic.Tool[] | null = null;
+    private cachedSystemPrompt: string | null = null;
+    private cachedWorkMode: WorkMode | null = null;
+    private cacheInvalidated = false;
+
+    // Error handling: Track retry counts for sensitive content errors
+    private sensitiveContentRetries = 0;
+    private readonly MAX_SENSITIVE_CONTENT_RETRIES = 3;
+
     // History management
     private readonly MAX_HISTORY_SIZE = 200; // Maximum messages in history
 
@@ -126,7 +136,105 @@ export class AgentRuntime {
     }
 
     public setWorkMode(mode: WorkMode) {
-        this.workMode = mode;
+        if (this.workMode !== mode) {
+            this.workMode = mode;
+            this.invalidateCache(); // Invalidate cache when work mode changes
+        }
+    }
+
+    /**
+     * Invalidate cached tools and system prompt
+     * Call this when work mode changes or dynamic tools are loaded
+     */
+    private invalidateCache(): void {
+        this.cachedTools = null;
+        this.cachedSystemPrompt = null;
+        this.cacheInvalidated = true;
+        logs.agent.debug('[AgentRuntime] Cache invalidated');
+    }
+
+    /**
+     * Get tools with caching to avoid unnecessary rebuilds
+     */
+    private async getToolsIfNeeded(): Promise<Anthropic.Tool[]> {
+        // Check if cache is valid
+        if (!this.cacheInvalidated && this.cachedTools && this.cachedWorkMode === this.workMode) {
+            return this.cachedTools;
+        }
+
+        // Rebuild cache
+        logs.agent.debug('[AgentRuntime] Rebuilding tool cache...');
+        const startTime = performance.now();
+
+        this.cachedTools = await this.toolRegistry.getTools();
+        this.cachedWorkMode = this.workMode;
+        this.cacheInvalidated = false;
+
+        const duration = performance.now() - startTime;
+        logs.agent.debug(`[AgentRuntime] Tool cache rebuilt in ${duration.toFixed(2)}ms (${this.cachedTools.length} tools)`);
+
+        return this.cachedTools;
+    }
+
+    /**
+     * Get system prompt with caching to avoid unnecessary rebuilds
+     */
+    private getSystemPromptIfNeeded(): string {
+        // Check if cache is valid
+        if (!this.cacheInvalidated && this.cachedSystemPrompt && this.cachedWorkMode === this.workMode) {
+            return this.cachedSystemPrompt;
+        }
+
+        // Rebuild cache
+        logs.agent.debug('[AgentRuntime] Rebuilding system prompt cache...');
+        const startTime = performance.now();
+
+        this.cachedSystemPrompt = this.promptService.buildSystemPrompt(this.skillManager, this.workMode);
+        this.cachedWorkMode = this.workMode;
+        this.cacheInvalidated = false;
+
+        const duration = performance.now() - startTime;
+        const promptLength = this.cachedSystemPrompt.length;
+        logs.agent.debug(`[AgentRuntime] System prompt cache rebuilt in ${duration.toFixed(2)}ms (${promptLength} chars)`);
+
+        return this.cachedSystemPrompt;
+    }
+
+    /**
+     * Smart history management that preserves important context
+     * while keeping memory usage under control
+     */
+    private manageHistory(): void {
+        if (this.history.length <= this.MAX_HISTORY_SIZE * 0.9) {
+            return; // Still has room
+        }
+
+        const SYSTEM_MESSAGES_TO_KEEP = 3; // Keep initial system messages
+        const messagesToKeep = this.MAX_HISTORY_SIZE - SYSTEM_MESSAGES_TO_KEEP;
+        const oldSize = this.history.length;
+
+        // Preserve beginning (system messages) and end (recent context)
+        this.history = [
+            ...this.history.slice(0, SYSTEM_MESSAGES_TO_KEEP),
+            ...this.history.slice(-messagesToKeep)
+        ];
+
+        logs.agent.info(`[AgentRuntime] History trimmed from ${oldSize} to ${this.history.length} messages`);
+    }
+
+    /**
+     * Check memory usage and trigger cleanup if needed
+     */
+    private checkMemoryUsage(): void {
+        const usage = process.memoryUsage();
+        const MB = 1024 * 1024;
+        const heapUsedMB = usage.heapUsed / MB;
+
+        // Warn if memory usage is high
+        if (heapUsedMB > 500) {
+            logs.agent.warn(`[AgentRuntime] High memory usage: ${heapUsedMB.toFixed(2)}MB`);
+            this.manageHistory();
+        }
     }
 
     public setModel(model: string) {
@@ -279,6 +387,9 @@ export class AgentRuntime {
 
         this.isProcessing = true;
 
+        // Reset retry counter for new message
+        this.sensitiveContentRetries = 0;
+
         try {
             this.abortController = new AbortController();
             this.setStage('THINKING');
@@ -292,6 +403,7 @@ export class AgentRuntime {
 
                 // Load dynamic tool executors after skills are loaded
                 await this.toolRegistry.loadDynamicTools();
+                this.invalidateCache(); // Invalidate cache after loading dynamic tools
             }
 
             // Performance optimization: Lazy load MCP clients on first message
@@ -302,11 +414,15 @@ export class AgentRuntime {
 
                     // Load MCP tool executors after clients are loaded
                     await this.toolRegistry.loadDynamicTools();
+                    this.invalidateCache(); // Invalidate cache after loading dynamic tools
                 } else {
                     await this.mcpService.closeAll();
                 }
                 this.mcpLoaded = true;
             }
+
+            // Check memory usage before processing
+            this.checkMemoryUsage();
 
             // Task complexity analysis for TodoWrite enforcement (Cowork mode only)
             let userContent: string | Anthropic.ContentBlockParam[] = '';
@@ -448,6 +564,7 @@ export class AgentRuntime {
         let keepGoing = true;
         let iterationCount = 0;
         const MAX_ITERATIONS = 30;
+        const loopStartTime = performance.now();
 
         while (keepGoing && iterationCount < MAX_ITERATIONS) {
             iterationCount++;
@@ -457,12 +574,13 @@ export class AgentRuntime {
             const configuredWorkMode = configStore.get('workMode') || 'cowork';
             if (this.workMode !== configuredWorkMode) {
                 this.workMode = configuredWorkMode;
+                // Cache will be invalidated automatically by setWorkMode
             }
 
-            // Get Tools from Registry
-            const tools = await this.toolRegistry.getTools();
-            // Get System Prompt from Service
-            const systemPrompt = this.promptService.buildSystemPrompt(this.skillManager, this.workMode);
+            // Get Tools from Registry (with caching)
+            const tools = await this.getToolsIfNeeded();
+            // Get System Prompt from Service (with caching)
+            const systemPrompt = this.getSystemPromptIfNeeded();
 
             logs.agent.info('Sending request to API...');
             logs.agent.info('Provider:', this.provider);
@@ -595,9 +713,21 @@ export class AgentRuntime {
                     continue;
                 }
 
-                // Handle Sensitive Content Error (1027)
-                if (loopErr.status === 500 && (loopErr.message?.includes('sensitive') || JSON.stringify(loopError).includes('1027'))) {
-                    logs.agent.info("Caught sensitive content error, asking Agent to retry...");
+                // Handle Sensitive Content Error (1027) with retry limit and exponential backoff
+                if (loopErr.status === 500 && this.isSensitiveContentError(loopErr)) {
+                    if (this.sensitiveContentRetries >= this.MAX_SENSITIVE_CONTENT_RETRIES) {
+                        logs.agent.error(`[AgentRuntime] Maximum sensitive content retries (${this.MAX_SENSITIVE_CONTENT_RETRIES}) exceeded`);
+                        this.broadcast('agent:error', `内容安全拦截次数过多（${this.MAX_SENSITIVE_CONTENT_RETRIES}次），请修改输入后重试。`);
+                        throw new Error('Maximum sensitive content retries exceeded');
+                    }
+
+                    this.sensitiveContentRetries++;
+                    logs.agent.info(`[AgentRuntime] Caught sensitive content error (${this.sensitiveContentRetries}/${this.MAX_SENSITIVE_CONTENT_RETRIES}), asking Agent to retry...`);
+
+                    // Exponential backoff: wait longer between retries to avoid overwhelming the filter
+                    const backoffDelay = Math.min(1000 * Math.pow(2, this.sensitiveContentRetries - 1), 5000);
+                    logs.agent.info(`[AgentRuntime] Applying exponential backoff: waiting ${backoffDelay}ms before retry`);
+                    await new Promise(resolve => setTimeout(resolve, backoffDelay));
 
                     // Add a system-like user message to prompt the agent to fix its output
                     this.history.push({
@@ -605,6 +735,9 @@ export class AgentRuntime {
                         content: `[SYSTEM ERROR] Your previous response was blocked by the safety filter (Error Code 1027: output new_sensitive). \n\nThis usually means the generated content contained sensitive, restricted, or unsafe material.\n\nPlease generate a NEW response that:\n1. Addresses the user's request safely.\n2. Avoids the sensitive topic or phrasing that triggered the block.\n3. Acknowledges the issue briefly if necessary.`
                     });
                     this.notifyUpdate();
+
+                    // Manage history size to prevent unbounded growth from retry messages
+                    this.manageHistory();
 
                     // Allow the loop to continue to the next iteration
                     continue;
@@ -614,6 +747,10 @@ export class AgentRuntime {
                 }
             }
         }
+
+        // Log loop completion time
+        const loopDuration = performance.now() - loopStartTime;
+        logs.agent.info(`[AgentRuntime] Loop completed in ${loopDuration.toFixed(2)}ms (${iterationCount} iterations)`);
     }
 
     private setStage(stage: AgentStage, detail?: unknown) {
@@ -758,5 +895,31 @@ This helps users track progress on complex workflows.
         // 4. Deny if no permission found
         logs.agent.warn(`[executeToolDirectly] Permission denied for ${toolName} at path ${path || '(any)'}`);
         return false;
+    }
+
+    /**
+     * Check if an error is a sensitive content error (1027)
+     * More robust than simple string matching
+     */
+    private isSensitiveContentError(error: { status?: number; message?: string } | unknown): boolean {
+        const err = error as { status?: number; message?: string };
+        if (err.status !== 500) return false;
+
+        const errorStr = JSON.stringify(error);
+        const messageStr = String(err.message || '');
+
+        // Check for various indicators of sensitive content errors
+        const indicators = [
+            '1027',
+            'sensitive',
+            'new_sensitive',
+            'content_filter',
+            'safety_filter'
+        ];
+
+        return indicators.some(indicator =>
+            messageStr.toLowerCase().includes(indicator) ||
+            errorStr.toLowerCase().includes(indicator)
+        );
     }
 }

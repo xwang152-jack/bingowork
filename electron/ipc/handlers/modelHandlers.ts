@@ -7,6 +7,7 @@ import { getAgentInstance } from './agentHandlers';
 import { TaskDatabase } from '../../config/TaskDatabase';
 import { OpenAIProvider } from '../../agent/providers/OpenAIProvider';
 import { AnthropicProvider } from '../../agent/providers/AnthropicProvider';
+import { logs } from '../../utils/logger';
 
 function broadcast(channel: string, data?: unknown) {
     const windows = BrowserWindow.getAllWindows();
@@ -136,7 +137,7 @@ export function registerModelHandlers(taskDb: TaskDatabase | null): void {
             const success = await instance.checkConnection();
             return { success };
         } catch (error) {
-            console.error('Connection check failed:', error);
+            logs.ipc.error('Connection check failed:', error);
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
     });

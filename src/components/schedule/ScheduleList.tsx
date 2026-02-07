@@ -14,8 +14,11 @@ interface ScheduleListProps {
   onRefresh: () => void;
 }
 
-export function ScheduleList({ tasks, onEdit, onRefresh }: ScheduleListProps) {
+export function ScheduleList({ tasks = [], onEdit, onRefresh }: ScheduleListProps) {
   const [refreshing, setRefreshing] = useState(false);
+
+  // Ensure tasks is always an array to prevent .filter errors
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
 
   const handleToggle = async (task: ScheduleTask) => {
     try {
@@ -60,10 +63,10 @@ export function ScheduleList({ tasks, onEdit, onRefresh }: ScheduleListProps) {
     }
   };
 
-  const activeCount = tasks.filter(t => t.status === 'active').length;
-  const pausedCount = tasks.filter(t => t.status === 'paused').length;
-  const completedCount = tasks.filter(t => t.status === 'completed').length;
-  const failedCount = tasks.filter(t => t.status === 'failed').length;
+  const activeCount = safeTasks.filter(t => t.status === 'active').length;
+  const pausedCount = safeTasks.filter(t => t.status === 'paused').length;
+  const completedCount = safeTasks.filter(t => t.status === 'completed').length;
+  const failedCount = safeTasks.filter(t => t.status === 'failed').length;
 
   return (
     <div className="space-y-4">
@@ -89,7 +92,7 @@ export function ScheduleList({ tasks, onEdit, onRefresh }: ScheduleListProps) {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-stone-500">共 {tasks.length} 个任务</p>
+        <p className="text-xs text-stone-500">共 {safeTasks.length} 个任务</p>
         <button
           type="button"
           onClick={handleRefresh}
@@ -102,7 +105,7 @@ export function ScheduleList({ tasks, onEdit, onRefresh }: ScheduleListProps) {
       </div>
 
       {/* Task List */}
-      {tasks.length === 0 ? (
+      {safeTasks.length === 0 ? (
         <div className="text-center py-12 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
           <Clock size={32} className="mx-auto mb-2 opacity-50" />
           <p className="text-sm">暂无定时任务</p>
@@ -110,7 +113,7 @@ export function ScheduleList({ tasks, onEdit, onRefresh }: ScheduleListProps) {
         </div>
       ) : (
         <div className="space-y-2 overflow-y-auto custom-scrollbar pr-1" style={{ maxHeight: '500px' }}>
-          {tasks.map(task => (
+          {safeTasks.map(task => (
             <ScheduleCard
               key={task.id}
               task={task}

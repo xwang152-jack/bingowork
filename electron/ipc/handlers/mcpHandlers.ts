@@ -11,6 +11,7 @@ import os from 'os';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import { IPC_CHANNELS } from '../../constants/IpcChannels';
+import { logs } from '../../utils/logger';
 
 import { AgentRuntime } from '../../agent/AgentRuntime';
 import type { MCPServerConfig, MCPConfigFile } from '../../agent/mcp/types.js';
@@ -28,7 +29,7 @@ export function setAgentInstance(agentInstance: AgentRuntime): void {
  */
 async function reloadMCPServices(): Promise<void> {
   if (agent) {
-    console.log('[MCP] Reloading MCP services...');
+    logs.mcp.info('[MCP] Reloading MCP services...');
     const mcpService = agent.getMCPService();
     if (mcpService) {
       await mcpService.loadClients();
@@ -38,7 +39,7 @@ async function reloadMCPServices(): Promise<void> {
       if (toolRegistry) {
         await toolRegistry.loadDynamicTools();
       }
-      console.log('[MCP] MCP services reloaded successfully');
+      logs.mcp.info('[MCP] MCP services reloaded successfully');
     }
   }
 }
@@ -95,7 +96,7 @@ async function migrateToV2(oldConfig: unknown): Promise<MCPConfigFile> {
 
     const newConfig: MCPConfigFile = { version: 2, servers };
     await saveMCPConfig(newConfig);
-    console.log('[MCP] Migrated config from v1 to v2 format');
+    logs.mcp.info('[MCP] Migrated config from v1 to v2 format');
     return newConfig;
   }
 
@@ -153,7 +154,7 @@ async function disconnectServerById(id: string): Promise<void> {
           if (typeof anyClient.close === 'function') await anyClient.close();
           else if (typeof anyClient.disconnect === 'function') await anyClient.disconnect();
         } catch (e) {
-          console.error(`Failed to disconnect MCP server ${id}:`, e);
+          logs.mcp.error(`Failed to disconnect MCP server ${id}:`, e);
         }
         clients.delete(id);
       }
@@ -186,7 +187,7 @@ export function registerMCPHandlers(): void {
       }
       await fs.writeFile(mcpConfigPath, content, 'utf-8');
 
-      console.log('[MCP] Configuration saved to:', mcpConfigPath);
+      logs.mcp.info('[MCP] Configuration saved to:', mcpConfigPath);
 
       await reloadMCPServices();
 
@@ -250,7 +251,7 @@ export function registerMCPHandlers(): void {
       config.servers.push(server);
       await saveMCPConfig(config);
 
-      console.log('[MCP] Server added:', server.id);
+      logs.mcp.info('[MCP] Server added:', server.id);
       await reloadMCPServices();
 
       return { success: true, data: server };
@@ -299,7 +300,7 @@ export function registerMCPHandlers(): void {
       config.servers[index] = mergedServer;
       await saveMCPConfig(config);
 
-      console.log('[MCP] Server updated:', id);
+      logs.mcp.info('[MCP] Server updated:', id);
       await reloadMCPServices();
 
       return { success: true, data: mergedServer };
@@ -325,7 +326,7 @@ export function registerMCPHandlers(): void {
       config.servers.splice(index, 1);
       await saveMCPConfig(config);
 
-      console.log('[MCP] Server deleted:', id);
+      logs.mcp.info('[MCP] Server deleted:', id);
       await reloadMCPServices();
 
       return { success: true };
@@ -349,7 +350,7 @@ export function registerMCPHandlers(): void {
       config.servers[index].updatedAt = Date.now();
       await saveMCPConfig(config);
 
-      console.log('[MCP] Server toggled:', id, 'enabled:', enabled);
+      logs.mcp.info(`[MCP] Server toggled: ${id}, enabled: ${enabled}`);
       await reloadMCPServices();
 
       return { success: true, data: config.servers[index] };

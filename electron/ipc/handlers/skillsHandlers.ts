@@ -8,6 +8,12 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import os from 'os';
 import { IPC_CHANNELS } from '../../constants/IpcChannels';
+import {
+  createSuccessResponse,
+  IpcErrorCode,
+  withIpcErrorHandling,
+} from '../types/IpcResponse';
+import { logs } from '../../utils/logger';
 
 const skillsDir = path.join(os.homedir(), '.bingowork', 'skills');
 
@@ -43,7 +49,7 @@ const getBuiltinSkills = (): SkillInfo[] => {
       isBuiltin: true,
     }));
   } catch (error) {
-    console.error('[Skills] Failed to get built-in skills:', error);
+    logs.ipc.error('[Skills] Failed to get built-in skills:', error);
     return [];
   }
 };
@@ -134,14 +140,14 @@ export function registerSkillsHandlers(): void {
 
       return Array.from(skillMap.values());
     } catch (error) {
-      console.error('[Skills] Failed to list skills:', error);
+      logs.ipc.error('[Skills] Failed to list skills:', error);
       return [];
     }
   });
 
   // Get skill content
   ipcMain.handle(IPC_CHANNELS.SKILLS.GET, async (_event, skillName: string) => {
-    try {
+    return withIpcErrorHandling(async () => {
       // Try built-in skills first
       let sourceDir = path.join(process.cwd(), 'resources', 'skills');
       if (app.isPackaged) {
@@ -179,26 +185,23 @@ export function registerSkillsHandlers(): void {
         isBuiltIn = false;
         skillPath = userPathLower;
       } else {
-        return { error: 'Skill not found' };
+        throw new Error(`Skill "${skillName}" not found`);
       }
 
-      return {
+      return createSuccessResponse({
         name: skillName,
         content: skillContent,
         isBuiltIn,
         path: skillPath,
-      };
-    } catch (error) {
-      console.error('[Skills] Failed to get skill:', error);
-      return { error: (error as Error).message };
-    }
+      });
+    }, IpcErrorCode.SKILL_NOT_FOUND)();
   });
 
   // Save skill
   ipcMain.handle(
     IPC_CHANNELS.SKILLS.SAVE,
     async (_event, skillName: string, content: string) => {
-      try {
+      return withIpcErrorHandling(async () => {
         const skillPath = path.join(skillsDir, skillName);
         if (!fsSync.existsSync(skillPath)) {
           fsSync.mkdirSync(skillPath, { recursive: true });
@@ -206,26 +209,20 @@ export function registerSkillsHandlers(): void {
 
         // Save with uppercase SKILL.md (new standard)
         await fs.writeFile(path.join(skillPath, 'SKILL.md'), content, 'utf-8');
-        return { success: true };
-      } catch (error) {
-        console.error('[Skills] Failed to save skill:', error);
-        return { success: false, error: (error as Error).message };
-      }
+        return createSuccessResponse();
+      }, IpcErrorCode.SKILL_SAVE_ERROR)();
     }
   );
 
   // Delete skill
   ipcMain.handle(IPC_CHANNELS.SKILLS.DELETE, async (_event, skillName: string) => {
-    try {
+    return withIpcErrorHandling(async () => {
       const skillPath = path.join(skillsDir, skillName);
       if (fsSync.existsSync(skillPath)) {
         await fs.rm(skillPath, { recursive: true, force: true });
-        return { success: true };
+        return createSuccessResponse();
       }
-      return { success: false, error: 'Skill not found' };
-    } catch (error) {
-      console.error('[Skills] Failed to delete skill:', error);
-      return { success: false, error: (error as Error).message };
-    }
+      throw new Error(`Skill "${skillName}" not found`);
+    }, IpcErrorCode.SKILL_NOT_FOUND)();
   });
 }
