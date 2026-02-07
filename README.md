@@ -153,6 +153,14 @@ npm run build        # Build for production
 
 ---
 
+## 📅 Changelog
+
+### v1.0.10 (2026-02-07)
+- 🐛 Fix: Corrected text alignment for user messages in chat interface
+
+---
+
+
 ## 📄 License
 
 MIT License - see [LICENSE](./LICENSE) file for details.
