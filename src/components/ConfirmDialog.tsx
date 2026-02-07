@@ -6,11 +6,12 @@ interface ConfirmationRequest {
     tool: string;
     description: string;
     args: Record<string, unknown>;
+    token?: string;
 }
 
 interface ConfirmDialogProps {
     request: ConfirmationRequest | null;
-    onConfirm: (id: string, remember: boolean, tool: string, path?: string) => void;
+    onConfirm: (id: string, remember: boolean, tool: string, path?: string, token?: string) => void;
     onDeny: (id: string) => void;
 }
 
@@ -80,7 +81,7 @@ export function ConfirmDialog({ request, onConfirm, onDeny }: ConfirmDialogProps
                     </button>
                     <button
                         onClick={() => {
-                            onConfirm(request.id, remember, request.tool, path);
+                            onConfirm(request.id, remember, request.tool, path, request.token);
                             setRemember(false);
                         }}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#E85D3E] to-[#d14a2e] text-white rounded-2xl hover:from-[#d14a2e] hover:to-[#b53d26] transition-all font-medium shadow-sm"
@@ -95,4 +96,3 @@ export function ConfirmDialog({ request, onConfirm, onDeny }: ConfirmDialogProps
 
 // Re-export useConfirmations for convenience
 export { useConfirmations } from './useConfirmations';
-

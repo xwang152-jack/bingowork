@@ -60,12 +60,12 @@ export function ScheduleView({ onClose: _onClose }: ScheduleViewProps) {
       setTasks(prev => prev.filter(t => t.id !== data.id));
     };
 
-    const handleTaskExecuted = (_event: unknown, ...args: unknown[]) => {
+    const handleTaskExecuted = (_event: unknown) => {
       // Reload all tasks to get updated status and last executed time
       loadTasks();
     };
 
-    const handleTaskFailed = (_event: unknown, ...args: unknown[]) => {
+    const handleTaskFailed = (_event: unknown) => {
       // Reload all tasks to get updated status and failure count
       loadTasks();
     };

@@ -143,31 +143,31 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
                     },
                     // Improved Spacing for Typography
                     p({ children }) {
-                        return <p className="mb-4 leading-7 text-stone-700 last:mb-0">{children}</p>;
+                        return <p className="mb-3 leading-7 last:mb-0">{children}</p>;
                     },
                     ul({ children }) {
-                        return <ul className="list-disc pl-6 mb-4 space-y-1 text-stone-700 marker:text-stone-400">{children}</ul>;
+                        return <ul className="list-disc pl-5 mb-3 space-y-1 marker:text-stone-300">{children}</ul>;
                     },
                     ol({ children }) {
-                        return <ol className="list-decimal pl-6 mb-4 space-y-1 text-stone-700 marker:text-stone-400">{children}</ol>;
+                        return <ol className="list-decimal pl-5 mb-3 space-y-1 marker:text-stone-300">{children}</ol>;
                     },
                     li({ children }) {
                         return <li className="pl-1">{children}</li>;
                     },
                     h1({ children }) {
-                        return <h1 className="text-2xl font-bold mt-8 mb-4 text-stone-900 pb-2 border-b border-stone-100">{children}</h1>;
+                        return <h1 className="text-xl font-bold mt-6 mb-3 pb-2 border-b border-stone-100">{children}</h1>;
                     },
                     h2({ children }) {
-                        return <h2 className="text-lg font-bold mt-6 mb-3 text-stone-900 flex items-center gap-2">
-                            <span className="w-1 h-5 bg-orange-500 rounded-full inline-block"></span>
+                        return <h2 className="text-base font-bold mt-5 mb-2.5 flex items-center gap-2">
+                            <span className="w-1 h-4 bg-orange-500 rounded-full inline-block"></span>
                             {children}
                         </h2>;
                     },
                     h3({ children }) {
-                        return <h3 className="text-base font-semibold mt-4 mb-2 text-stone-800">{children}</h3>;
+                        return <h3 className="text-sm font-semibold mt-4 mb-2">{children}</h3>;
                     },
                     blockquote({ children }) {
-                        return <blockquote className="border-l-4 border-orange-200 pl-4 py-1 my-4 text-stone-600 italic bg-orange-50/30 rounded-r-lg">{children}</blockquote>;
+                        return <blockquote className="border-l-4 border-orange-200 pl-4 py-1 my-3 italic bg-orange-50/20 rounded-r-lg">{children}</blockquote>;
                     },
                     a({ href, children }) {
                         // Web links open in new tab

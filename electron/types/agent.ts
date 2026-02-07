@@ -131,6 +131,7 @@ export interface ToolConfirmationRequest {
   tool: string;
   description: string;
   args: Record<string, unknown>;
+  token?: string;
 }
 
 /**

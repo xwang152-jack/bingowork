@@ -5,6 +5,7 @@ interface ConfirmationRequest {
     tool: string;
     description: string;
     args: Record<string, unknown>;
+    token?: string;
 }
 
 // Hook for managing confirmations
@@ -20,8 +21,8 @@ export function useConfirmations() {
         return cleanup;
     }, []);
 
-    const handleConfirm = (id: string, remember: boolean, tool: string, path?: string) => {
-        window.ipcRenderer.invoke('agent:confirm-response', { id, approved: true, remember, tool, path });
+    const handleConfirm = (id: string, remember: boolean, tool: string, path?: string, token?: string) => {
+        window.ipcRenderer.invoke('agent:confirm-response', { id, approved: true, remember, tool, path, token });
         setPendingRequest(null);
     };
 
@@ -34,4 +35,3 @@ export function useConfirmations() {
 }
 
 export type { ConfirmationRequest };
-

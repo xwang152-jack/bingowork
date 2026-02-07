@@ -16,6 +16,7 @@ import { OpenAIProvider } from './providers/OpenAIProvider';
 import { MiniMaxProvider } from './providers/MiniMaxProvider';
 import { generateResponse, ProviderId } from './providers/generateResponse';
 import { logs } from '../utils/logger';
+import { createPendingConfirmation } from '../ipc/handlers/agentHandlers';
 
 export type AgentMessage = {
     role: 'user' | 'assistant';
@@ -824,9 +825,10 @@ This helps users track progress on complex workflows.
         // unless they were explicitly "remembered" in step 1.
 
         const id = `confirm-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const token = createPendingConfirmation(id, tool, path || '');
         return new Promise((resolve) => {
             this.pendingConfirmations.set(id, { resolve });
-            this.broadcast('agent:confirm-request', { id, tool, description, args });
+            this.broadcast('agent:confirm-request', { id, tool, description, args, token });
         });
     }
 
