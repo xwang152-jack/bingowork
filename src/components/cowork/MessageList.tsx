@@ -194,13 +194,44 @@ interface MessageItemProps {
 
 // Custom comparison function for MessageItem
 const areMessageEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
-    return (
-        prevProps.message === nextProps.message &&
-        prevProps.isDark === nextProps.isDark &&
+    // 1. Basic prop check
+    if (prevProps.message !== nextProps.message || prevProps.isDark !== nextProps.isDark) {
+        return false;
+    }
+
+    // 2. Check logic for tool updates
+    // If tool-related maps are identical, no need to check further
+    if (
         prevProps.toolResultById === nextProps.toolResultById &&
         prevProps.toolStreamById === nextProps.toolStreamById &&
         prevProps.toolStatusById === nextProps.toolStatusById
-    );
+    ) {
+        return true;
+    }
+
+    // 3. If maps changed, check if ANY tool usage IN THIS MESSAGE is affected.
+    const content = prevProps.message.content;
+
+    // If content is string, it has no tools, so we ignore tool updates
+    if (typeof content === 'string') return true;
+
+    if (Array.isArray(content)) {
+        // Iterate blocks to find tool_use and check if their status/output changed
+        for (const block of content) {
+            if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_use') {
+                const id = String((block as { id?: unknown }).id || '');
+                if (!id) continue;
+
+                // Check if specific tool state changed for this ID
+                if (prevProps.toolResultById[id] !== nextProps.toolResultById[id]) return false;
+                if (prevProps.toolStreamById[id] !== nextProps.toolStreamById[id]) return false;
+                if (prevProps.toolStatusById[id] !== nextProps.toolStatusById[id]) return false;
+            }
+        }
+    }
+
+    // If we scanned all tools in this message and none of them changed, return true (equal)
+    return true;
 };
 
 const MessageItem = memo(function MessageItem({ message, isDark, toolResultById, toolStreamById, toolStatusById }: MessageItemProps) {

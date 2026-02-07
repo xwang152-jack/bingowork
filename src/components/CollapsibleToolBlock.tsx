@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { ChevronDown, ChevronUp, Terminal, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 
@@ -16,7 +16,7 @@ interface CollapsibleToolBlockProps {
     status?: 'running' | 'done' | 'error';
 }
 
-export function CollapsibleToolBlock({ toolName, output, status = 'done' }: CollapsibleToolBlockProps) {
+export const CollapsibleToolBlock = memo(function CollapsibleToolBlock({ toolName, output, status = 'done' }: CollapsibleToolBlockProps) {
     const [expanded, setExpanded] = useState(false);
 
     const getStatusIcon = () => {
@@ -58,7 +58,7 @@ export function CollapsibleToolBlock({ toolName, output, status = 'done' }: Coll
             )}
         </div>
     );
-}
+});
 
 interface StepsIndicatorProps {
     count: number;
