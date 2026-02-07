@@ -157,7 +157,7 @@ export function MessageList({ messages, isDark = false, streamingText = '' }: Me
                 rafRef.current = null;
             }
         };
-    }, [visibleMessages.length, streamingText.length, scrollToBottom]);
+    }, [visibleMessages, streamingText, toolStreamById, scrollToBottom]);
 
     if (visibleMessages.length === 0) {
         return <EmptyState />;

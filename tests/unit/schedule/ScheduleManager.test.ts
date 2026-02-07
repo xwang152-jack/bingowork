@@ -8,14 +8,31 @@ import { TaskDatabase } from '../../../electron/config/TaskDatabase';
 import { AgentRuntime } from '../../../electron/agent/AgentRuntime';
 import { ScheduleType, ScheduleStatus, type ScheduleTask } from '../../../electron/agent/schedule/types';
 
+// Mock Electron
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/tmp'),
+  },
+  BrowserWindow: vi.fn(),
+  ipcMain: {
+    handle: vi.fn(),
+  },
+}));
+
 // Mock TaskDatabase
 vi.mock('../../../electron/config/TaskDatabase', () => ({
-  TaskDatabase: vi.fn(() => ({
-    setKV: vi.fn(),
-    getKV: vi.fn(),
-    deleteKV: vi.fn(),
-    getKVByPrefix: vi.fn(() => new Map()),
-  })),
+  TaskDatabase: class {
+    setKV = vi.fn();
+    getKV = vi.fn();
+    deleteKV = vi.fn();
+    getKVByPrefix = vi.fn(() => new Map());
+    insertExecutionLog = vi.fn();
+    updateExecutionLog = vi.fn();
+    getExecutionLogs = vi.fn(() => []);
+    deleteExecutionLogs = vi.fn();
+    recoverStuckExecutionLogs = vi.fn(() => 0);
+    cleanupExecutionLogs = vi.fn(() => 0);
+  },
 }));
 
 // Mock AgentRuntime
@@ -327,6 +344,8 @@ describe('ScheduleManager', () => {
 
       expect(mockAgent.processUserMessage).toHaveBeenCalledWith('Test message');
       expect(result).toBeDefined();
+      expect(mockTaskDb.insertExecutionLog).toHaveBeenCalled();
+      expect(mockTaskDb.updateExecutionLog).toHaveBeenCalled();
     });
 
     it('should execute a tool task', async () => {
@@ -361,6 +380,8 @@ describe('ScheduleManager', () => {
 
       expect(mockAgent.executeToolDirectly).toHaveBeenCalledWith('test_tool', { param1: 'value1' });
       expect(result).toBe('Tool executed');
+      expect(mockTaskDb.insertExecutionLog).toHaveBeenCalled();
+      expect(mockTaskDb.updateExecutionLog).toHaveBeenCalled();
     });
 
     it('should throw error for non-existent task', async () => {

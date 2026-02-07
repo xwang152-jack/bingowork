@@ -12,15 +12,13 @@ import { AgentRuntime } from '../AgentRuntime';
 import { logs } from '../../utils/logger';
 import {
   ScheduleTask,
-  ScheduleExecutionLog,
   ScheduleType,
   ScheduleStatus,
   getTaskKey,
-  getLogKey,
-  SCHEDULE_STORAGE_PREFIX,
-  LOG_STORAGE_PREFIX,
   calculateNextExecution,
   validateScheduleConfig,
+  ScheduleExecutionLog,
+  SCHEDULE_STORAGE_PREFIX,
 } from './types';
 
 /**
@@ -59,6 +57,10 @@ export class ScheduleManager {
   constructor(taskDb: TaskDatabase) {
     this.taskDb = taskDb;
   }
+  // ... (omitting strictly unchanged methods to keep replacement concise, but here I need to target imports at top too) 
+  // The tool replacer works on chunks. I'll split into two chunks if needed, or just one if contiguous?
+  // Checks: Imports are at top, getLogsByTaskId is middle.
+  // I will do two edits. One for imports, one for getLogs.
 
   /**
    * Set the agent instance for task execution
@@ -88,6 +90,27 @@ export class ScheduleManager {
 
     // Load and start all active tasks
     await this.loadActiveTasks();
+
+    // Recover stuck tasks from previous session
+    try {
+      const recoveredCount = this.taskDb.recoverStuckExecutionLogs();
+      if (recoveredCount > 0) {
+        logs.schedule.info(`Recovered ${recoveredCount} stuck execution logs`);
+      }
+    } catch (error) {
+      logs.schedule.error('Failed to recover stuck execution logs:', error);
+    }
+
+    // Cleanup old logs (older than 7 days)
+    try {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const deletedCount = this.taskDb.cleanupExecutionLogs(sevenDaysAgo);
+      if (deletedCount > 0) {
+        logs.schedule.info(`Cleaned up ${deletedCount} old execution logs`);
+      }
+    } catch (error) {
+      logs.schedule.error('Failed to cleanup old execution logs:', error);
+    }
 
     // Start the check timer
     this.startCheckTimer();
@@ -256,10 +279,7 @@ export class ScheduleManager {
     this.taskDb.deleteKV(getTaskKey(taskId));
 
     // Delete associated logs
-    const taskLogs = await this.getLogsByTaskId(taskId);
-    for (const log of taskLogs) {
-      this.taskDb.deleteKV(getLogKey(log.id));
-    }
+    this.taskDb.deleteExecutionLogs(taskId);
 
     // Broadcast deletion event
     this.broadcast('schedule:task-deleted', { id: taskId });
@@ -320,18 +340,14 @@ export class ScheduleManager {
    * Get execution logs for a task
    */
   async getLogsByTaskId(taskId: string): Promise<ScheduleExecutionLog[]> {
-    const logsMap = this.taskDb.getKVByPrefix<ScheduleExecutionLog>(LOG_STORAGE_PREFIX);
-    return Array.from(logsMap.values())
-      .filter(log => log.taskId === taskId)
-      .sort((a, b) => b.startedAt - a.startedAt);
+    return this.taskDb.getExecutionLogs(taskId) as unknown as ScheduleExecutionLog[];
   }
 
   /**
    * Get all execution logs
    */
   async getAllLogs(): Promise<ScheduleExecutionLog[]> {
-    const logsMap = this.taskDb.getKVByPrefix<ScheduleExecutionLog>(LOG_STORAGE_PREFIX);
-    return Array.from(logsMap.values()).sort((a, b) => b.startedAt - a.startedAt);
+    return this.taskDb.getExecutionLogs(null) as unknown as ScheduleExecutionLog[];
   }
 
   /**
@@ -513,7 +529,7 @@ export class ScheduleManager {
       startedAt: Date.now(),
       status: 'running',
     };
-    this.taskDb.setKV(getLogKey(logId), log);
+    this.taskDb.insertExecutionLog(log);
 
     // Track running task
     const runningTask: RunningTask = {
@@ -564,7 +580,7 @@ export class ScheduleManager {
       log.completedAt = Date.now();
       log.status = 'success';
       log.result = result;
-      this.taskDb.setKV(getLogKey(logId), log);
+      this.taskDb.updateExecutionLog(log);
 
       // Calculate next execution time
       if (task.type === ScheduleType.INTERVAL && task.schedule.interval) {
@@ -615,7 +631,7 @@ export class ScheduleManager {
       log.completedAt = Date.now();
       log.status = 'failed';
       log.error = errorMessage;
-      this.taskDb.setKV(getLogKey(logId), log);
+      this.taskDb.updateExecutionLog(log);
 
       // Broadcast failure event
       this.broadcast('schedule:task-failed', { taskId: task.id, logId, error: errorMessage });
@@ -640,14 +656,18 @@ export class ScheduleManager {
   private handleTaskTimeout(taskId: string, logId: string): void {
     logs.schedule.warn(`Task timeout: ${taskId}`);
 
-    // Update log
-    const log = this.taskDb.getKV<ScheduleExecutionLog>(getLogKey(logId));
-    if (log) {
-      log.completedAt = Date.now();
-      log.status = 'timeout';
-      log.error = 'Task execution timeout';
-      this.taskDb.setKV(getLogKey(logId), log);
-    }
+    // Update log - we need to fetch it first or just update blind?
+    // updateExecutionLog only needs id and status...
+    // But the method in TaskDatabase takes a partial/full object.
+    // Let's create a minimal object for update
+    const logUpdate = {
+      id: logId,
+      status: 'timeout',
+      completedAt: Date.now(),
+      error: 'Task execution timeout'
+    };
+
+    this.taskDb.updateExecutionLog(logUpdate);
 
     // Remove from running tasks
     this.runningTasks.delete(taskId);

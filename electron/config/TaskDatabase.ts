@@ -125,6 +125,20 @@ export class TaskDatabase {
                 INSERT INTO memories_fts(memories_fts, rowid, content, tags_json) VALUES('delete', old.id, old.content, old.tags_json);
                 INSERT INTO memories_fts(rowid, content, tags_json) VALUES (new.id, new.content, new.tags_json);
             END;
+
+            CREATE TABLE IF NOT EXISTS task_execution_logs (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                result TEXT,
+                error TEXT,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_logs_task_id ON task_execution_logs(task_id);
+            CREATE INDEX IF NOT EXISTS idx_logs_created_at ON task_execution_logs(created_at);
         `);
     }
 
@@ -250,6 +264,122 @@ export class TaskDatabase {
     }
 
     /**
+     * Execution Log Methods
+     */
+
+    insertExecutionLog(log: {
+        id: string;
+        taskId: string;
+        status: string;
+        startedAt: number;
+        completedAt?: number;
+        result?: string;
+        error?: string;
+    }) {
+        const stmt = this.db.prepare(`
+            INSERT INTO task_execution_logs (id, task_id, status, started_at, completed_at, result, error, created_at)
+            VALUES (@id, @taskId, @status, @startedAt, @completedAt, @result, @error, @startedAt)
+        `);
+        stmt.run({
+            id: log.id,
+            taskId: log.taskId,
+            status: log.status,
+            startedAt: log.startedAt,
+            completedAt: log.completedAt || null,
+            result: log.result || null,
+            error: log.error || null
+        });
+    }
+
+    updateExecutionLog(log: {
+        id: string;
+        status: string;
+        completedAt?: number;
+        result?: string;
+        error?: string;
+    }) {
+        const stmt = this.db.prepare(`
+            UPDATE task_execution_logs
+            SET status = @status, completed_at = @completedAt, result = @result, error = @error
+            WHERE id = @id
+        `);
+        stmt.run({
+            id: log.id,
+            status: log.status,
+            completedAt: log.completedAt || null,
+            result: log.result || null,
+            error: log.error || null
+        });
+    }
+
+    getExecutionLogs(taskId: string | null = null, limit: number = 100, offset: number = 0): Array<{
+        id: string;
+        taskId: string;
+        status: string;
+        startedAt: number;
+        completedAt?: number;
+        result?: string;
+        error?: string;
+    }> {
+        const params: { limit: number; offset: number; taskId?: string } = { limit, offset };
+        let query = `SELECT * FROM task_execution_logs`;
+
+        if (taskId) {
+            query += ` WHERE task_id = @taskId`;
+            params.taskId = taskId;
+        }
+
+        query += ` ORDER BY created_at DESC LIMIT @limit OFFSET @offset`;
+
+        const stmt = this.db.prepare(query);
+        const rows = stmt.all(params) as Array<{
+            id: string;
+            task_id: string;
+            status: string;
+            started_at: number;
+            completed_at?: number;
+            result?: string;
+            error?: string;
+        }>;
+
+        return rows.map(row => ({
+            id: row.id,
+            taskId: row.task_id,
+            status: row.status,
+            startedAt: row.started_at,
+            completedAt: row.completed_at || undefined,
+            result: row.result || undefined,
+            error: row.error || undefined
+        }));
+    }
+
+    cleanupExecutionLogs(beforeTimestamp: number): number {
+        const stmt = this.db.prepare(`
+            DELETE FROM task_execution_logs WHERE created_at < @beforeTimestamp
+        `);
+        const result = stmt.run({ beforeTimestamp });
+        return result.changes;
+    }
+
+    deleteExecutionLogs(taskId: string): number {
+        const stmt = this.db.prepare(`
+            DELETE FROM task_execution_logs WHERE task_id = @taskId
+        `);
+        const result = stmt.run({ taskId });
+        return result.changes;
+    }
+
+    recoverStuckExecutionLogs(): number {
+        const stmt = this.db.prepare(`
+            UPDATE task_execution_logs
+            SET status = 'failed', error = 'System crash or unexpected termination', completed_at = @now
+            WHERE status = 'running'
+        `);
+        const result = stmt.run({ now: Date.now() });
+        return result.changes;
+    }
+
+    /**
      * Permanent Memory Methods
      */
 
@@ -294,11 +424,11 @@ export class TaskDatabase {
         // 2. Fallback/Supplement with LIKE search if we haven't reached the limit
         if (results.length < limit) {
             const keywords = this.buildLikeKeywords(tokens, normalizedQuery);
-            
+
             if (keywords.length > 0) {
                 const existingIds = new Set(results.map(r => r.id));
                 const remainingLimit = limit - results.length;
-                
+
                 const likeConditions = keywords.map((_, i) => `(content LIKE @k${i} OR tags_json LIKE @k${i})`).join(' OR ');
                 const scoreFragments = keywords.map((_, i) => `(content LIKE @k${i}) + (tags_json LIKE @k${i})`).join(' + ');
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any

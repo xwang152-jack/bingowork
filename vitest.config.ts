@@ -13,7 +13,8 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: [
       'src/**/*.{test,spec}.{js,ts,tsx}',
-      'electron/**/*.{test,spec}.{js,ts,tsx}'
+      'electron/**/*.{test,spec}.{js,ts,tsx}',
+      'tests/**/*.{test,spec}.{js,ts,tsx}'
     ],
     exclude: [
       'node_modules',
