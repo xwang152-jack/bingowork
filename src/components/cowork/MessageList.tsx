@@ -236,7 +236,7 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
             </div>
 
             {/* Content */}
-            <div className={`flex-1 max-w-[85%] ${isUser ? 'text-right' : ''}`}>
+            <div className={`flex-1 max-w-[85%]`}>
                 <div className={contentWrapperClass}>
                     <div className="space-y-3">
                         {contentBlocks.map((block, index) => {
