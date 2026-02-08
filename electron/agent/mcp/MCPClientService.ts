@@ -119,27 +119,56 @@ export class MCPClientService {
         console.log(`[MCP] Successfully connected to ${this.clients.size} server(s):`, Array.from(this.clients.keys()));
     }
 
+    private async resolveEnvVariables(env: Record<string, string>): Promise<Record<string, string>> {
+        const resolved = { ...env };
+        const { configStore } = await import('../../config/ConfigStore');
+        
+        for (const [key, value] of Object.entries(resolved)) {
+            if (!value) continue;
+
+            // Resolve {{App.ApiKey}} - Current provider's key
+            if (value.includes('{{App.ApiKey}}')) {
+                 const currentProvider = configStore.get('provider');
+                 const apiKey = await configStore.getApiKey(currentProvider);
+                 resolved[key] = value.replace('{{App.ApiKey}}', apiKey || '');
+            } 
+            
+            // Resolve {{App.ApiKey:provider}} - Specific provider's key
+            const providerMatch = value.match(/{{App\.ApiKey:(\w+)}}/);
+            if (providerMatch) {
+                 const provider = providerMatch[1];
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 const apiKey = await configStore.getApiKey(provider as any);
+                 resolved[key] = value.replace(providerMatch[0], apiKey || '');
+            }
+
+            // Resolve {{App.ApiUrl}}
+            if (value.includes('{{App.ApiUrl}}')) {
+                 const apiUrl = configStore.getApiUrl();
+                 resolved[key] = value.replace('{{App.ApiUrl}}', apiUrl || '');
+            }
+        }
+        return resolved;
+    }
+
     private async connectToServer(name: string, config: MCPServerConfig) {
         if (this.clients.has(name)) return;
 
         try {
-            const finalEnv = { ...(process.env as Record<string, string>), ...config.env };
+            let finalEnv = { ...(process.env as Record<string, string>), ...config.env };
 
-            // [Restored] Sync API Key from ConfigStore if Base URL matches MiniMax
-            // This allows users to use the app's configured key without duplicating it in mcp.json
-            const { configStore } = await import('../../config/ConfigStore'); // Dynamic import to avoid cycles if any
-            const appApiKey = await configStore.getApiKey('minimax');
-            const appApiUrl = configStore.getApiUrl() || '';
-
-            // Check if we should inject the app's key
-            if (name === 'MiniMax' && appApiUrl.includes('minimax') && appApiKey) {
-                // Only override if the config env key is placeholder or missing
+            // Compatibility: Auto-inject MiniMax key if missing/placeholder
+            // This replaces the previous hardcoded check with a dynamic injection
+            if (name.toLowerCase() === 'minimax') {
                 const configKey = config.env?.MINIMAX_API_KEY;
                 if (!configKey || configKey === "YOUR_API_KEY_HERE" || configKey.includes("API密钥")) {
-                    console.log('Injecting App API Key for MiniMax MCP Server');
-                    finalEnv['MINIMAX_API_KEY'] = appApiKey;
+                    console.log('[MCP] Auto-injecting MiniMax API Key via placeholder');
+                    finalEnv['MINIMAX_API_KEY'] = '{{App.ApiKey:minimax}}';
                 }
             }
+
+            // Resolve all environment variables including placeholders
+            finalEnv = await this.resolveEnvVariables(finalEnv);
 
             // Choose transport based on config type
             let transport;

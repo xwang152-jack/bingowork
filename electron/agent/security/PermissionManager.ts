@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { configStore } from '../../config/ConfigStore';
+import type { TaskDatabase } from '../../config/TaskDatabase';
 
 /**
  * SECURITY: Sensitive system directories that should never be authorized
@@ -68,6 +69,11 @@ function logAuthorizationChange(entry: AuthorizationAuditLogEntry): void {
     auditLog.shift();
   }
 
+  // Log to persistent storage if available
+  if (permissionManager) {
+    permissionManager.logToDatabase(entry);
+  }
+
   // Log security-relevant events
   if (entry.action === 'blocked') {
     console.warn('[Permission Security]', JSON.stringify(entry));
@@ -133,8 +139,34 @@ function isSensitiveSystemDirectory(normalizedPath: string): { isSensitive: bool
 
 export class PermissionManager {
 
+  private taskDb: TaskDatabase | null = null;
+
   constructor() {
     // No initialization needed
+  }
+
+  /**
+   * Inject TaskDatabase for audit logging
+   */
+  setTaskDatabase(db: TaskDatabase | null) {
+    this.taskDb = db;
+  }
+
+  /**
+   * Log entry to persistent database
+   */
+  logToDatabase(entry: AuthorizationAuditLogEntry) {
+    if (this.taskDb) {
+      try {
+        this.taskDb.logEvent({
+          type: 'security_audit',
+          payload: entry,
+          ts: entry.timestamp
+        });
+      } catch (error) {
+        console.error('[PermissionManager] Failed to log to database:', error);
+      }
+    }
   }
 
   /**

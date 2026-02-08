@@ -35,6 +35,7 @@ export interface AppConfig {
     shortcut: string;
     allowedPermissions: ToolPermission[];
     workMode: WorkMode;
+    pythonExecutionMode: 'host' | 'docker';
     autoUpdateEnabled?: boolean;
     lastUpdateCheck?: number;
 }
@@ -63,7 +64,8 @@ const defaults: AppConfig = {
     browserAccess: false, // Disabled by default, requires agent-browser install
     shortcut: 'Alt+Space',
     allowedPermissions: [],
-    workMode: 'cowork'
+    workMode: 'cowork',
+    pythonExecutionMode: 'host'
 };
 
 /**
@@ -459,6 +461,19 @@ class ConfigStore {
 
     setBrowserAccess(enabled: boolean): void {
         this.data.browserAccess = enabled;
+        this.save();
+    }
+
+    // =====================================================
+    // Python Execution Mode
+    // =====================================================
+
+    getPythonExecutionMode(): 'host' | 'docker' {
+        return this.data.pythonExecutionMode || 'host';
+    }
+
+    setPythonExecutionMode(mode: 'host' | 'docker'): void {
+        this.data.pythonExecutionMode = mode;
         this.save();
     }
 

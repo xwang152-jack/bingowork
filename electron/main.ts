@@ -16,6 +16,7 @@ import { getWindowManager } from './windows/WindowManager';
 import { getTrayManager } from './services/TrayManager';
 import { getShortcutManager } from './services/ShortcutManager';
 import { getAgentInitializer } from './services/AgentInitializer';
+import { permissionManager } from './agent/security/PermissionManager';
 
 // IPC Handlers
 import { registerAllIPCHandlers, setAgentInstance, setMainWindow, setTaskDatabase, setScheduleManager, setUpdateMainWindow, checkForUpdatesOnStartup } from './ipc/handlers';
@@ -114,6 +115,7 @@ app.whenReady().then(async () => {
     setTaskDatabase(taskDb);
     setMainWindow(mainWindow);
     setUpdateMainWindow(mainWindow);
+    permissionManager.setTaskDatabase(taskDb);
 
     // 7.5. Initialize ScheduleManager
     if (taskDb) {

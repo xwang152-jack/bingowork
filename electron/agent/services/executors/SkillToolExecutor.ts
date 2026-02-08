@@ -13,6 +13,7 @@ import {
 } from '../ToolExecutor';
 import Anthropic from '@anthropic-ai/sdk';
 import { SkillManager } from '../../skills/SkillManager';
+import { configStore } from '../../../config/ConfigStore';
 
 // ============================================================================
 // Skill Tool Executor
@@ -42,16 +43,37 @@ class SkillToolExecutor extends BaseToolExecutor {
             return `Error: Skill ${this.name} not found.`;
         }
 
-        return `[SKILL LOADED: ${this.name}]
+        const mode = configStore.getPythonExecutionMode();
+        let executionInstruction = '';
 
-SKILL DIRECTORY: ${skillInfo.skillDir}
+        if (mode === 'docker') {
+            // Docker Sandbox Mode
+            // Mount the skill directory to /app and set it as working directory
+            // Use --rm to clean up container after exit
+            // Use python:3.10-slim as default image (lightweight)
+            executionInstruction = `
+run_command: docker run --rm -v "${skillInfo.skillDir}:/app" -w /app python:3.10-slim python /app/your_script.py
 
-Follow these instructions to complete the user's request. When the instructions reference Python modules in core/, create your script in the working directory and run it from the skill directory:
-
+Note: Ensure your script is relative to the skill directory.
+`;
+        } else {
+            // Host Mode (Default)
+            executionInstruction = `
 run_command: cd "${skillInfo.skillDir}" && python /path/to/your_script.py
 
 Or add to the top of your script:
 import sys; sys.path.insert(0, r"${skillInfo.skillDir}")
+`;
+        }
+
+        return `[SKILL LOADED: ${this.name}]
+
+SKILL DIRECTORY: ${skillInfo.skillDir}
+EXECUTION MODE: ${mode.toUpperCase()}
+
+Follow these instructions to complete the user's request. When the instructions reference Python modules in core/, create your script in the working directory and run it using the command below:
+
+${executionInstruction}
 
 ---
 ${skillInfo.instructions}
