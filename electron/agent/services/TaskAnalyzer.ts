@@ -29,7 +29,7 @@ interface Pattern {
 
 export class TaskAnalyzer {
     // Minimum score to require TodoWrite
-    private readonly THRESHOLD = 3;
+    private readonly THRESHOLD = 1;
 
     // Patterns for detecting multi-step tasks
     private readonly PATTERNS: Pattern[] = [
@@ -39,7 +39,7 @@ export class TaskAnalyzer {
         { regex: /\b(test|debug|fix|resolve)\b.*\b(and|then|after|also|plus|additionally)\b/gi, weight: 2, type: 'sequential-work' },
 
         // File operations (medium weight)
-        { regex: /\b(read|write|create|delete|modify|edit)\b.*\b(file|files)\b/gi, weight: 1.5, type: 'file-ops' },
+        { regex: /\b(read|write|create|delete|modify|edit)\b.*\b(file|files)\b/gi, weight: 2, type: 'file-ops' },
         { regex: /\bmultiple\b.*(file|files|documents|steps|tasks)\b/gi, weight: 2, type: 'multiple-items' },
         { regex: /\beach\b.*(file|step|task|item)\b/gi, weight: 1.5, type: 'iterative' },
 
@@ -63,9 +63,9 @@ export class TaskAnalyzer {
 
     // Patterns that indicate simple tasks (negative weight)
     private readonly SIMPLE_PATTERNS: Pattern[] = [
-        { regex: /\b(what|how|why|when|where|who|which|explain|tell me|show me)\b/gi, weight: -2, type: 'question' },
-        { regex: /\b(read|open|view|show|display)\b\s+(?!.*and\s)/gi, weight: -1.5, type: 'simple-read' },
-        { regex: /^\s*(what|how|tell|explain|is|are|do|does|can|could|would|should)\b/gi, weight: -2, type: 'simple-query' },
+        { regex: /\b(what|how|why|when|where|who|which|explain|tell me|show me)\b/gi, weight: -1, type: 'question' },
+        { regex: /\b(read|open|view|show|display)\b\s+(?!.*and\s)/gi, weight: -0.5, type: 'simple-read' },
+        { regex: /^\s*(what|how|tell|explain|is|are|do|does|can|could|would|should)\b/gi, weight: -1, type: 'simple-query' },
     ];
 
     /**

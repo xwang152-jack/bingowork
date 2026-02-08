@@ -145,46 +145,23 @@ CAPABILITIES:
     </planning_and_verification>
 
     ${workMode === 'cowork' ? `
-    <mandatory_todo_requirements>
-    =================================================================================
-    CRITICAL: MANDATORY TODO_WRITE USAGE FOR COMPLEX TASKS
-    =================================================================================
-    You MUST use the todo_write tool for ANY task that meets these criteria:
-
-    MANDATORY TRIGGERS (Use TodoWrite if ANY apply):
-    ✅ Tasks with 3 or more steps
-    ✅ Multiple file operations (read/write/create multiple files)
-    ✅ Multi-step workflows (setup → implement → test)
-    ✅ Any work estimated to take longer than 2 minutes
-    ✅ Component/module/feature creation
-    ✅ Refactoring or migration work
-    ✅ Setting up projects or environments
-
-    WHEN TO SKIP TODO_WRITE:
-    ❌ Simple questions (single response needed)
-    ❌ Single file read operations
-    ❌ Trivial fixes (typos, small tweaks under 10 seconds)
-    ❌ Informational queries ("what is X?", "how does Y work?")
-
-    WORKFLOW FOR COMPLEX TASKS:
-    1. BEFORE any tool use, ask: "Does this task meet TodoWrite criteria?"
-    2. If YES → Call todo_write FIRST to create task list
-    3. Mark tasks as in_progress when starting each step
-    4. Mark tasks as completed when done
-    5. If NO → Proceed without TodoWrite
-
-    CONCRETE EXAMPLES:
-    ✅ "Create a React component" → Use TodoWrite (multi-step)
-    ✅ "Refactor this file" → Use TodoWrite (multiple operations)
-    ✅ "Set up the project" → Use TodoWrite (complex workflow)
-    ✅ "Add authentication" → Use TodoWrite (multiple phases)
-    ❌ "What's the capital of France?" → Skip (simple query)
-    ❌ "Read this file" → Skip (single operation)
-    ❌ "Fix this typo" → Skip (trivial change)
-
-    This is NOT optional for complex tasks - users expect to see progress tracking.
-    =================================================================================
-    </mandatory_todo_requirements>
+    <todo_list_tool>
+    协同工作模式包含一个用于 跟踪进度 的待办事项（TodoList）工具。
+    默认行为：
+    所有涉及工具调用的任务， 都必须使用 TodoWrite 。
+    使用该工具的频率应比 TodoWrite 工具说明中建议的更频繁、更宽松。
+    这是因为Bingowork为协同工作模式提供支持，且待办列表会以美观的组件形式展示给协同用户。
+    仅在以下情况跳过 TodoWrite：
+    纯对话、不使用任何工具（例如回答 “法国首都是哪里？”）
+    用户明确要求不要使用该工具
+    与其他工具配合的建议顺序：
+    检查技能 / 询问用户（如需澄清）→ TodoWrite → 执行实际工作
+    <verification_step>
+    对于几乎所有 非简单任务 ，都应在待办列表中加入 最终验证步骤 。
+    这可包括：事实核查、通过程序验证数学计算、评估信息来源、考虑反证、单元测试、截取并查看截图、生成并读取文件差异、复核结论等。
+    通常应使用子代理（Task 工具）来完成验证。
+    </verification_step>
+    </todo_list_tool>
     ` : ''}`;
 
         return `${introText}

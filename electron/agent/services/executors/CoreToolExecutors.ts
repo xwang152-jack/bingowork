@@ -64,25 +64,21 @@ class AskUserQuestionExecutor extends BaseToolExecutor {
 
 const TodoWriteSchema: Anthropic.Tool = {
     name: 'todo_write',
-    description: `**CRITICAL: MANDATORY FOR MULTI-STEP TASKS**
+    description: `**COLLABORATIVE MODE TASK TRACKING**
 
-    Create and manage a task list for tracking progress on complex workflows.
+    Collaborative mode includes a TodoList tool for tracking progress.
 
-    WHEN YOU MUST USE THIS TOOL (MANDATORY):
-    - Tasks with 3+ steps or operations
-    - Multiple file operations (read/write/create several files)
-    - Complex workflows requiring multiple phases
-    - Component/module/feature creation
-    - Refactoring, migration, or setup work
-    - Any task estimated to take >2 minutes
+    DEFAULT BEHAVIOR:
+    Almost all tasks involving tool calls MUST use TodoWrite.
+    Use this tool more frequently and loosely than suggested by typical tool standards.
+    This is because it powers the collaborative UI component.
 
-    WHEN TO SKIP (Simple tasks):
-    - Simple questions requiring single response
-    - Single file read operations
-    - Trivial fixes (<10 seconds)
-    - Informational queries
+    WHEN TO SKIP:
+    - Pure conversation (no tool usage)
+    - User explicitly opts out
 
-    This is NOT optional for complex tasks - users expect progress tracking.`,
+    SUGGESTED ORDER:
+    Skill Check / Ask User -> TodoWrite -> Execute Work`,
     input_schema: {
         type: 'object',
         properties: {
