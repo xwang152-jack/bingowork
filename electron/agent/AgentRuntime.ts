@@ -448,52 +448,113 @@ export class AgentRuntime {
     }
 
     private async executeTools(toolUses: Anthropic.ContentBlock[]): Promise<Anthropic.ToolResultBlockParam[]> {
-        const results: Anthropic.ToolResultBlockParam[] = [];
+        const results: Anthropic.ToolResultBlockParam[] = new Array(toolUses.length);
+        const pendingPromises: { index: number; promise: Promise<string> }[] = [];
 
-        for (const toolUse of toolUses) {
+        for (let i = 0; i < toolUses.length; i++) {
+            const toolUse = toolUses[i];
             if (toolUse.type !== 'tool_use') continue;
 
+            // Broadcast tool call event immediately
             this.broadcast('agent:tool-call', {
                 callId: toolUse.id,
                 name: toolUse.name,
                 input: toolUse.input as Record<string, unknown>
             });
-            this.stateManager.setStage('EXECUTING', { tool: toolUse.name, toolUseId: toolUse.id });
-            this.currentToolUseId = toolUse.id;
 
-            let result = "Tool execution failed or unknown tool.";
-            const startedAt = Date.now();
+            const isSerial = this.isSerialTool(toolUse.name);
 
-            try {
-                result = await this.toolRegistry.executeTool(
-                    toolUse.name,
-                    toolUse.input as Record<string, unknown>,
-                    undefined,
-                    this.abortController?.signal
-                );
-                this.broadcast('agent:tool-result', { callId: toolUse.id, status: 'done' });
-                this.eventSink?.logEvent('tool_executed', {
-                    tool: toolUse.name, toolUseId: toolUse.id,
-                    durationMs: Date.now() - startedAt, ok: true
-                });
-            } catch (toolErr: unknown) {
-                result = `Error executing tool: ${(toolErr as Error).message}`;
-                this.broadcast('agent:tool-result', {
-                    callId: toolUse.id, status: 'error',
-                    error: (toolErr as Error).message
-                });
-                this.eventSink?.logEvent('tool_executed', {
-                    tool: toolUse.name, toolUseId: toolUse.id,
-                    durationMs: Date.now() - startedAt, ok: false,
-                    error: (toolErr as Error).message
-                });
+            if (isSerial) {
+                // 1. Wait for all pending parallel tools to finish before starting a serial tool
+                if (pendingPromises.length > 0) {
+                    await this.waitForPendingTools(pendingPromises, results, toolUses);
+                }
+
+                // 2. Execute serial tool
+                this.stateManager.setStage('EXECUTING', { tool: toolUse.name, toolUseId: toolUse.id });
+                this.currentToolUseId = toolUse.id; // Enable streaming for this tool
+                
+                const result = await this.executeSingleToolSafe(toolUse);
+                results[i] = { type: 'tool_result', tool_use_id: toolUse.id, content: result };
+                
+                this.currentToolUseId = null;
+            } else {
+                // 3. Schedule parallel tool
+                this.stateManager.setStage('EXECUTING', { tool: toolUse.name, toolUseId: toolUse.id });
+                
+                const promise = this.executeSingleToolSafe(toolUse);
+                pendingPromises.push({ index: i, promise });
             }
-
-            this.currentToolUseId = null;
-            results.push({ type: 'tool_result', tool_use_id: toolUse.id, content: result });
         }
 
-        return results;
+        // Wait for remaining parallel tools
+        if (pendingPromises.length > 0) {
+            await this.waitForPendingTools(pendingPromises, results, toolUses);
+        }
+
+        return results.filter(r => r !== undefined);
+    }
+
+    private async waitForPendingTools(
+        pending: { index: number; promise: Promise<string> }[], 
+        results: Anthropic.ToolResultBlockParam[],
+        toolUses: Anthropic.ContentBlock[]
+    ) {
+        const completed = await Promise.all(pending.map(p => p.promise));
+        
+        pending.forEach((p, idx) => {
+             const toolUse = toolUses[p.index];
+             if (toolUse.type === 'tool_use') {
+                 results[p.index] = { 
+                     type: 'tool_result', 
+                     tool_use_id: toolUse.id, 
+                     content: completed[idx] 
+                 };
+             }
+        });
+        pending.length = 0;
+    }
+
+    private async executeSingleToolSafe(toolUse: Anthropic.ContentBlock): Promise<string> {
+         if (toolUse.type !== 'tool_use') return "";
+         
+         const startedAt = Date.now();
+         let result = "";
+         
+         try {
+            result = await this.toolRegistry.executeTool(
+                toolUse.name,
+                toolUse.input as Record<string, unknown>,
+                undefined,
+                this.abortController?.signal
+            );
+            this.broadcast('agent:tool-result', { callId: toolUse.id, status: 'done' });
+            this.eventSink?.logEvent('tool_executed', {
+                tool: toolUse.name, toolUseId: toolUse.id,
+                durationMs: Date.now() - startedAt, ok: true
+            });
+         } catch (toolErr: unknown) {
+             result = `Error executing tool: ${(toolErr as Error).message}`;
+             this.broadcast('agent:tool-result', {
+                 callId: toolUse.id, status: 'error',
+                 error: (toolErr as Error).message
+             });
+             this.eventSink?.logEvent('tool_executed', {
+                 tool: toolUse.name, toolUseId: toolUse.id,
+                 durationMs: Date.now() - startedAt, ok: false,
+                 error: (toolErr as Error).message
+             });
+         }
+         return result;
+    }
+
+    private isSerialTool(name: string): boolean {
+        // run_command is the main one that streams and needs serial execution
+        // We also treat all MCP tools as serial for safety unless we know otherwise
+        if (name === 'run_command') return true;
+        if (name.includes('__')) return true; // MCP tools
+        if (name === 'ask_user') return true; // Interactive
+        return false;
     }
 
     private async handleLoopError(error: unknown, _iterationCount: number): Promise<{ continue: boolean; decrementIteration?: boolean }> {

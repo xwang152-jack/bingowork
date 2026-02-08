@@ -30,6 +30,10 @@ interface Pattern {
 export class TaskAnalyzer {
     // Minimum score to require TodoWrite
     private readonly THRESHOLD = 1;
+    
+    // Cache for analysis results
+    private cache = new Map<string, TaskAnalysis>();
+    private readonly MAX_CACHE_SIZE = 50;
 
     // Patterns for detecting multi-step tasks
     private readonly PATTERNS: Pattern[] = [
@@ -72,6 +76,11 @@ export class TaskAnalyzer {
      * Analyze a user message to determine if TodoWrite is required
      */
     analyzeMessage(message: string): TaskAnalysis {
+        const cacheKey = message.trim();
+        if (this.cache.has(cacheKey)) {
+            return this.cache.get(cacheKey)!;
+        }
+
         const indicators = this.checkIndicators(message);
 
         // Calculate total score
@@ -81,6 +90,13 @@ export class TaskAnalyzer {
         const result = this.determineComplexity(score, indicators, message);
 
         logs.agent.info(`[TaskAnalyzer] Score: ${score}, Requires Todo: ${result.requiresTodo}, Reason: ${result.reason}`);
+
+        // Update cache
+        if (this.cache.size >= this.MAX_CACHE_SIZE) {
+            const firstKey = this.cache.keys().next().value;
+            if (firstKey) this.cache.delete(firstKey);
+        }
+        this.cache.set(cacheKey, result);
 
         return result;
     }
