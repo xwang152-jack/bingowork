@@ -32,19 +32,13 @@ import { logs } from '../utils/logger';
 import { createPendingConfirmation } from '../ipc/handlers/agentHandlers';
 
 // Import refactored modules
-import { AGENT_CONSTANTS, SUPPORTED_IMAGE_TYPES, AgentStage } from './AgentConstants';
+import { AGENT_CONSTANTS, SUPPORTED_IMAGE_TYPES, AgentStage, AgentMessage } from './AgentConstants';
 import { AgentErrorHandler, AgentError } from './AgentErrorHandler';
 import { AgentStateManager, AgentEventSink } from './AgentStateManager';
 import { AgentUIBridge } from './AgentUIBridge';
 
 // Re-export types for compatibility
 export type { AgentStage, AgentEventSink };
-
-export type AgentMessage = {
-    role: 'user' | 'assistant';
-    content: string | Anthropic.ContentBlock[];
-    id?: string;
-};
 
 export class AgentRuntime {
     private llmProvider: BaseLLMProvider;
@@ -193,13 +187,77 @@ export class AgentRuntime {
         this.notifyUpdate();
     }
 
-    public loadHistory(messages: Anthropic.MessageParam[]) {
+    public loadHistory(messages: (Anthropic.MessageParam | AgentMessage)[]) {
         this.stateManager.loadHistory(messages);
         this.artifacts = [];
         this.notifyUpdate();
     }
 
     public getHistorySize(): number { return this.stateManager.getHistorySize(); }
+
+    public getHistory(): AgentMessage[] { return this.stateManager.getHistory(); }
+
+    public deleteMessage(id: string) {
+        logs.agent.info(`[AgentRuntime] Deleting message: ${id}`);
+        this.stateManager.deleteMessage(id);
+        this.notifyUpdate();
+    }
+
+    public async regenerate(id: string) {
+        logs.agent.info(`[AgentRuntime] Regenerating message: ${id}`);
+        // Abort current processing if any
+        if (this.stateManager.getIsProcessing()) {
+            this.abort();
+            // Wait a bit for cleanup?
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        const history = this.stateManager.getHistory();
+        const targetIndex = history.findIndex(m => m.id === id);
+        if (targetIndex === -1) return;
+
+        const targetMsg = history[targetIndex];
+        
+        // Truncate history (remove target and everything after)
+        this.stateManager.truncateHistory(id);
+        this.notifyUpdate();
+
+        if (targetMsg.role === 'assistant') {
+            // Regenerate assistant response
+            this.stateManager.setIsProcessing(true);
+            try {
+                 this.stateManager.setStage('THINKING');
+                 await this.runLoop();
+            } catch (error) {
+                 this.handleProcessingError(error);
+            } finally {
+                 this.stateManager.setIsProcessing(false);
+                 this.stateManager.setStage('IDLE');
+                 this.notifyUpdate();
+            }
+        } else if (targetMsg.role === 'user') {
+            // Resend user message
+            let text = '';
+            const images: string[] = [];
+
+            if (typeof targetMsg.content === 'string') {
+                text = targetMsg.content;
+            } else if (Array.isArray(targetMsg.content)) {
+                text = targetMsg.content
+                    .filter(b => b.type === 'text')
+                    .map(b => (b as any).text || '')
+                    .join('\n');
+                
+                targetMsg.content.forEach(b => {
+                    if (b.type === 'image' && b.source?.type === 'base64') {
+                        images.push(`data:${b.source.media_type};base64,${b.source.data}`);
+                    }
+                });
+            }
+
+            await this.processUserMessage({ content: text, images });
+        }
+    }
 
     // Public API - Confirmations
     public handleConfirmResponse(id: string, approved: boolean) {

@@ -4,7 +4,7 @@
  */
 
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, Copy, RotateCcw, Pencil, Trash2, Check, MoreHorizontal } from 'lucide-react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { CollapsibleToolBlock } from '../CollapsibleToolBlock';
 import { AgentMessage } from '../../../electron/types/ipc';
@@ -13,9 +13,11 @@ export interface MessageListProps {
     messages: AgentMessage[];
     isDark?: boolean;
     streamingText?: string;
+    onDelete?: (id: string) => void;
+    onRegenerate?: (id: string) => void;
 }
 
-export function MessageList({ messages, isDark = false, streamingText = '' }: MessageListProps) {
+export function MessageList({ messages, isDark = false, streamingText = '', onDelete, onRegenerate }: MessageListProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [toolStreamById, setToolStreamById] = useState<Record<string, string>>({});
     const [toolStatusById, setToolStatusById] = useState<Record<string, 'running' | 'done' | 'error'>>({});
@@ -159,6 +161,12 @@ export function MessageList({ messages, isDark = false, streamingText = '' }: Me
         };
     }, [visibleMessages, streamingText, toolStreamById, scrollToBottom]);
 
+    useEffect(() => {
+        if (messages.length > 0) {
+            console.log('[MessageList] Messages update:', messages.length, 'Last msg ID:', messages[messages.length - 1].id);
+        }
+    }, [messages]);
+
     if (visibleMessages.length === 0) {
         return <EmptyState />;
     }
@@ -174,6 +182,8 @@ export function MessageList({ messages, isDark = false, streamingText = '' }: Me
                         toolResultById={toolResultById}
                         toolStreamById={toolStreamById}
                         toolStatusById={toolStatusById}
+                        onDelete={onDelete}
+                        onRegenerate={onRegenerate}
                     />
                 ))}
                 {streamingText && (
@@ -190,6 +200,8 @@ interface MessageItemProps {
     toolResultById: Record<string, string>;
     toolStreamById: Record<string, string>;
     toolStatusById: Record<string, 'running' | 'done' | 'error'>;
+    onDelete?: (id: string) => void;
+    onRegenerate?: (id: string) => void;
 }
 
 // Custom comparison function for MessageItem
@@ -234,8 +246,9 @@ const areMessageEqual = (prevProps: MessageItemProps, nextProps: MessageItemProp
     return true;
 };
 
-const MessageItem = memo(function MessageItem({ message, isDark, toolResultById, toolStreamById, toolStatusById }: MessageItemProps) {
+const MessageItem = memo(function MessageItem({ message, isDark, toolResultById, toolStreamById, toolStatusById, onDelete, onRegenerate }: MessageItemProps) {
     const isUser = message.role === 'user';
+    const [isCopied, setIsCopied] = useState(false);
 
     // Normalize content to array format for consistent rendering
     const contentBlocks = useMemo(() => {
@@ -259,8 +272,26 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
             } px-5 py-3.5 w-fit max-w-full`;
     }, [isUser]);
 
+    const handleCopy = useCallback(() => {
+        let textToCopy = '';
+        if (typeof message.content === 'string') {
+            textToCopy = message.content;
+        } else if (Array.isArray(message.content)) {
+            textToCopy = message.content
+                .filter(b => b && typeof b === 'object' && 'type' in b && b.type === 'text')
+                .map(b => (b as { text: string }).text)
+                .join('\n');
+        }
+
+        if (textToCopy) {
+            navigator.clipboard.writeText(textToCopy);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        }
+    }, [message.content]);
+
     return (
-        <div className={`flex gap-4 ${isUser ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex gap-4 ${isUser ? 'flex-row-reverse' : ''} group`}>
             {/* Avatar */}
             <div className={avatarClass}>
                 {isUser ? <User size={20} /> : <Bot size={20} />}
@@ -320,6 +351,67 @@ const MessageItem = memo(function MessageItem({ message, isDark, toolResultById,
                             return null;
                         })}
                     </div>
+                </div>
+
+                {/* Toolbar */}
+                <div className={`flex items-center gap-1 mt-1.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <button
+                        onClick={handleCopy}
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                        title="复制"
+                    >
+                        {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                    
+                    {!isUser && (
+                        <button
+                            onClick={() => {
+                                if (!message.id) {
+                                    console.error('Message ID is missing, cannot regenerate');
+                                    alert('无法重新生成：消息 ID 丢失。请尝试刷新页面。');
+                                    return;
+                                }
+                                console.log('[MessageItem] Regenerate clicked', message.id);
+                                onRegenerate?.(message.id);
+                            }}
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                            title="重新生成"
+                        >
+                            <RotateCcw size={14} />
+                        </button>
+                    )}
+
+                    {isUser && (
+                        <button
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                            title="编辑"
+                        >
+                            <Pencil size={14} />
+                        </button>
+                    )}
+
+                    <button
+                        onClick={() => {
+                            if (!message.id) {
+                                console.error('Message ID is missing, cannot delete');
+                                alert('无法删除：消息 ID 丢失。请尝试刷新页面。');
+                                return;
+                            }
+                            console.log('[MessageItem] Delete clicked', message.id);
+                            onDelete?.(message.id);
+                        }}
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                        title="删除"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                    
+                    <button
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                        title="更多"
+                    >
+                        <MoreHorizontal size={14} />
+                    </button>
                 </div>
             </div>
         </div>

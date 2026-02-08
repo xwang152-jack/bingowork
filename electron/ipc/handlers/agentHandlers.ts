@@ -308,6 +308,20 @@ export function registerAgentHandlers(): void {
     agent?.abort();
   });
 
+  // Delete message
+  ipcMain.handle(AGENT_CHANNELS.DELETE_MESSAGE, (_event, id: string) => {
+    if (!agent) throw new Error('Agent not initialized');
+    agent.deleteMessage(id);
+    return { success: true };
+  });
+
+  // Regenerate message
+  ipcMain.handle(AGENT_CHANNELS.REGENERATE, async (_event, id: string) => {
+    if (!agent) throw new Error('Agent not initialized');
+    await agent.regenerate(id);
+    return { success: true };
+  });
+
   // SECURITY: Handle confirmation response with token verification
   ipcMain.handle(
     AGENT_CHANNELS.CONFIRM_RESPONSE,

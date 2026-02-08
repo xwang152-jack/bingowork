@@ -6,8 +6,9 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { nanoid } from 'nanoid';
 import { logs } from '../utils/logger';
-import { AGENT_CONSTANTS, AgentStage } from './AgentConstants';
+import { AGENT_CONSTANTS, AgentStage, AgentMessage } from './AgentConstants';
 
 /**
  * Event sink interface for logging events
@@ -29,7 +30,7 @@ export type StageBroadcastCallback = (channel: string, data: unknown) => void;
  */
 export class AgentStateManager {
     private stage: AgentStage = 'IDLE';
-    private history: Anthropic.MessageParam[] = [];
+    private history: AgentMessage[] = [];
     private isProcessing = false;
     private sensitiveContentRetries = 0;
 
@@ -83,7 +84,7 @@ export class AgentStateManager {
     /**
      * Get current history
      */
-    getHistory(): Anthropic.MessageParam[] {
+    getHistory(): AgentMessage[] {
         return this.history;
     }
 
@@ -97,8 +98,12 @@ export class AgentStateManager {
     /**
      * Add message to history
      */
-    addToHistory(message: Anthropic.MessageParam): void {
-        this.history.push(message);
+    addToHistory(message: Anthropic.MessageParam | AgentMessage): void {
+        const msgWithId: AgentMessage = {
+            ...message,
+            id: (message as AgentMessage).id || nanoid(),
+        };
+        this.history.push(msgWithId);
     }
 
     /**
@@ -111,8 +116,25 @@ export class AgentStateManager {
     /**
      * Load history from saved session
      */
-    loadHistory(messages: Anthropic.MessageParam[]): void {
-        this.history = messages.slice(0, AGENT_CONSTANTS.MAX_HISTORY_SIZE);
+    loadHistory(messages: (Anthropic.MessageParam | AgentMessage)[]): void {
+        const withIds: AgentMessage[] = messages.map((m) => ({
+            ...m,
+            id: (m as AgentMessage).id || nanoid(),
+        }));
+        this.history = withIds.slice(0, AGENT_CONSTANTS.MAX_HISTORY_SIZE);
+    }
+
+    deleteMessage(id: string): void {
+        const next = this.history.filter((m) => m.id !== id);
+        this.history = next;
+    }
+
+    truncateHistory(id: string): AgentMessage[] {
+        const index = this.history.findIndex((m) => m.id === id);
+        if (index === -1) return [];
+        const removed = this.history.slice(index);
+        this.history = this.history.slice(0, index);
+        return removed;
     }
 
     /**

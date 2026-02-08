@@ -7,7 +7,9 @@
 
 import { EventEmitter } from 'events';
 import Anthropic from '@anthropic-ai/sdk';
+import { nanoid } from 'nanoid';
 
+import { AgentMessage } from '../AgentConstants';
 import {
     agentStateReducer,
     AgentStateContext,
@@ -28,7 +30,7 @@ import {
 export interface StateManagerOptions {
     onStageChange?: (stage: AgentStage, detail?: unknown) => void;
     onError?: (error: string, status?: number) => void;
-    onHistoryUpdate?: (history: Anthropic.MessageParam[]) => void;
+    onHistoryUpdate?: (history: AgentMessage[]) => void;
 }
 
 // ============================================================================
@@ -36,13 +38,13 @@ export interface StateManagerOptions {
 // ============================================================================
 
 export class AgentStateManager extends EventEmitter {
-    private context: AgentStateContext;
+    private context: AgentStateContext & { history: AgentMessage[] };
     private options: StateManagerOptions;
 
     constructor(options: StateManagerOptions = {}) {
         super();
         this.options = options;
-        this.context = { ...initialContext };
+        this.context = { ...initialContext, history: [] };
     }
 
     // ========================================================================
@@ -216,13 +218,63 @@ export class AgentStateManager extends EventEmitter {
     /**
      * Update history (external to state machine for performance)
      */
-    updateHistory(history: Anthropic.MessageParam[]): void {
-        this.context.history = history.slice(0, MAX_HISTORY_SIZE);
-        this.context.historySize = history.length;
+    updateHistory(history: (Anthropic.MessageParam | AgentMessage)[]): void {
+        // Ensure all messages have IDs
+        const historyWithIds: AgentMessage[] = history.map(msg => ({
+            ...msg,
+            id: (msg as AgentMessage).id || nanoid()
+        }));
+
+        this.context.history = historyWithIds.slice(0, MAX_HISTORY_SIZE);
+        this.context.historySize = historyWithIds.length;
 
         if (this.options.onHistoryUpdate) {
-            this.options.onHistoryUpdate(history);
+            this.options.onHistoryUpdate(this.context.history);
         }
+    }
+
+    /**
+     * Add to history
+     */
+    addToHistory(message: Anthropic.MessageParam | AgentMessage): void {
+        const msgWithId: AgentMessage = {
+            ...message,
+            id: (message as AgentMessage).id || nanoid()
+        };
+        this.updateHistory([...this.context.history, msgWithId]);
+    }
+
+    /**
+     * Delete a message by ID
+     */
+    deleteMessage(id: string): void {
+        const newHistory = this.context.history.filter(m => (m as AgentMessage).id !== id);
+        if (newHistory.length !== this.context.history.length) {
+            this.updateHistory(newHistory);
+        }
+    }
+
+    /**
+     * Truncate history from a specific message ID (exclusive or inclusive?)
+     * Returns the removed messages.
+     * Logic: Find message with ID. Remove it and everything after it.
+     */
+    truncateHistory(id: string): AgentMessage[] {
+        const index = this.context.history.findIndex(m => (m as AgentMessage).id === id);
+        if (index === -1) return [];
+
+        const preserved = this.context.history.slice(0, index);
+        const removed = this.context.history.slice(index);
+        
+        this.updateHistory(preserved);
+        return removed;
+    }
+
+    /**
+     * Load history (alias for updateHistory)
+     */
+    loadHistory(history: (Anthropic.MessageParam | AgentMessage)[]): void {
+        this.updateHistory(history);
     }
 
     /**
@@ -235,7 +287,7 @@ export class AgentStateManager extends EventEmitter {
     /**
      * Get history
      */
-    getHistory(): Anthropic.MessageParam[] {
+    getHistory(): AgentMessage[] {
         return this.context.history;
     }
 

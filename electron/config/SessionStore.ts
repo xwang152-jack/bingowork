@@ -2,14 +2,14 @@ import Store from 'electron-store';
 import path from 'path';
 import fs from 'fs';
 import { nanoid } from 'nanoid';
-import Anthropic from '@anthropic-ai/sdk';
+import { AgentMessage } from '../agent/AgentConstants';
 
 export interface Session {
     id: string;
     title: string;
     createdAt: number;
     updatedAt: number;
-    messages: Anthropic.MessageParam[];
+    messages: AgentMessage[];
 }
 
 interface SessionStoreSchema {
@@ -75,7 +75,7 @@ export class SessionStore {
 
     // Update session messages
     // onlyUpdateTitle: if true, don't update timestamp (used for loading sessions)
-    updateSession(id: string, messages: Anthropic.MessageParam[], title?: string, onlyUpdateTitle = false): void {
+    updateSession(id: string, messages: AgentMessage[], title?: string, onlyUpdateTitle = false): void {
         const sessions = this.store.get('sessions') || [];
         const index = sessions.findIndex(s => s.id === id);
         if (index >= 0) {

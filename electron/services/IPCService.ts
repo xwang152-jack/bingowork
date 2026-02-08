@@ -10,6 +10,14 @@ class IPCService {
         await window.ipcRenderer.invoke('agent:abort');
     }
 
+    async deleteMessage(id: string): Promise<void> {
+        await window.ipcRenderer.invoke('agent:delete-message', id);
+    }
+
+    async regenerateMessage(id: string): Promise<void> {
+        await window.ipcRenderer.invoke('agent:regenerate', id);
+    }
+
     async setWorkMode(mode: 'chat' | 'code' | 'cowork'): Promise<void> {
         await window.ipcRenderer.invoke('agent:set-work-mode', mode);
     }

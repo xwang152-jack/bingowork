@@ -14,6 +14,8 @@ export interface UseAgentResult {
     streamingText: string;
     sendMessage: (content: string, images?: string[]) => Promise<void>;
     abort: () => Promise<void>;
+    deleteMessage: (id: string) => Promise<void>;
+    regenerateMessage: (id: string) => Promise<void>;
     error: string | null;
 }
 
@@ -118,6 +120,30 @@ export function useAgent(): UseAgentResult {
         setIsProcessing(false);
     }, []);
 
+    const deleteMessage = useCallback(async (id: string) => {
+        setIsProcessing(true);
+        setError(null);
+        try {
+            await ipcService.deleteMessage(id);
+        } catch (err) {
+            console.error('Failed to delete message:', err);
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setIsProcessing(false);
+        }
+    }, []);
+
+    const regenerateMessage = useCallback(async (id: string) => {
+        setIsProcessing(true);
+        setError(null);
+        try {
+            await ipcService.regenerateMessage(id);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+            setIsProcessing(false);
+        }
+    }, []);
+
     return {
         history,
         isProcessing,
@@ -125,6 +151,8 @@ export function useAgent(): UseAgentResult {
         streamingText,
         sendMessage,
         abort,
+        deleteMessage,
+        regenerateMessage,
         error,
     };
 }

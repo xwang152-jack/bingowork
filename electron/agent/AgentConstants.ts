@@ -5,6 +5,8 @@
  * Extracted from AgentRuntime.ts to eliminate magic numbers.
  */
 
+import Anthropic from '@anthropic-ai/sdk';
+
 /**
  * Agent runtime configuration constants
  */
@@ -64,3 +66,11 @@ export const SENSITIVE_CONTENT_INDICATORS = [
     'content_filter',
     'safety_filter',
 ] as const;
+
+/**
+ * Agent Message Type
+ * Extends Anthropic.MessageParam with an optional ID for management
+ */
+export type AgentMessage = Anthropic.MessageParam & {
+    id?: string;
+};

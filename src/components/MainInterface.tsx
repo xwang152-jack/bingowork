@@ -21,6 +21,8 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
         sendMessage,
         abort,
         streamingText,
+        deleteMessage,
+        regenerateMessage,
     } = useAgent();
 
     const {
@@ -116,6 +118,8 @@ export default function MainInterface({ onOpenSettings }: MainInterfaceProps) {
                 <MessageList
                     messages={history}
                     streamingText={streamingText}
+                    onDelete={deleteMessage}
+                    onRegenerate={regenerateMessage}
                 />
 
                 {/* Input Area */}

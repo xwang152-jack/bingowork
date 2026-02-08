@@ -4,11 +4,10 @@
  */
 
 import { ipcMain } from 'electron';
-import Anthropic from '@anthropic-ai/sdk';
 import { sessionStore } from '../../config/SessionStore';
 import { SESSION_CHANNELS } from '../../constants/IpcChannels';
 import { getAgentInstance } from './agentHandlers';
-import type { AgentMessage } from '../../types/ipc';
+import type { AgentMessage } from '../../agent/AgentConstants';
 import {
   createSuccessResponse,
   IpcErrorCode,
@@ -48,12 +47,13 @@ export function registerSessionHandlers(): void {
       const agent = getAgentInstance();
       if (agent) {
         agent.loadHistory(session.messages);
+        sessionStore.updateSession(id, agent.getHistory(), undefined, true);
         // Explicitly send history update to the requesting window
         // This ensures the frontend receives the loaded history even if
         // the event listener was registered after loadHistory was called
         setTimeout(() => {
           if (!event.sender.isDestroyed()) {
-            event.sender.send('agent:history-update', session.messages);
+            event.sender.send('agent:history-update', agent.getHistory());
           }
         }, 50);
       }
@@ -91,7 +91,7 @@ export function registerSessionHandlers(): void {
             // Notify frontend
             setTimeout(() => {
               if (!event.sender.isDestroyed()) {
-                event.sender.send('agent:history-update', session.messages);
+                event.sender.send('agent:history-update', agent.getHistory());
               }
             }, 50);
           }
@@ -122,10 +122,10 @@ export function registerSessionHandlers(): void {
   });
 }
 
-function normalizeMessages(messages: unknown): Anthropic.MessageParam[] {
+function normalizeMessages(messages: unknown): AgentMessage[] {
   if (!Array.isArray(messages)) return [];
 
-  const normalized: Anthropic.MessageParam[] = [];
+  const normalized: AgentMessage[] = [];
   for (const msg of messages as unknown[]) {
     if (!msg || typeof msg !== 'object') continue;
     const candidate = msg as Partial<AgentMessage>;
@@ -133,7 +133,7 @@ function normalizeMessages(messages: unknown): Anthropic.MessageParam[] {
     if (role !== 'user' && role !== 'assistant') continue;
 
     if (candidate.content === undefined) continue;
-    normalized.push({ role, content: candidate.content });
+    normalized.push({ role, content: candidate.content, id: candidate.id });
   }
 
   return normalized;

@@ -12,6 +12,8 @@ export const AGENT_CHANNELS = {
   SEND_MESSAGE: 'agent:send-message',
   SEND_MESSAGE_ALIAS: 'agent:sendMessage', // Alias for compatibility
   ABORT: 'agent:abort',
+  DELETE_MESSAGE: 'agent:delete-message',
+  REGENERATE: 'agent:regenerate',
 
   // Events (from main to renderer)
   STREAM_TOKEN: 'agent:stream-token',
