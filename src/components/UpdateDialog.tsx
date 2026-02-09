@@ -24,9 +24,9 @@ export function UpdateDialog({ onClose }: UpdateDialogProps) {
     // Get current version from package.json
     if (typeof window !== 'undefined' && (window as any).electron) {
       // In production, this will be set by electron
-      setCurrentVersion((window as any).electron?.appVersion || '1.0.8');
+      setCurrentVersion((window as any).electron?.appVersion || '1.0.12');
     } else {
-      setCurrentVersion('1.0.8');
+      setCurrentVersion('1.0.12');
     }
 
     // Check for updates on mount

@@ -503,7 +503,7 @@ export function SettingsView({ onClose }: SettingsViewProps) {
                                     </div>
                                     <h3 className="text-2xl font-bold text-stone-800">Bingowork</h3>
                                     <p className="text-sm text-stone-500 mt-1">你的数字同事</p>
-                                    <p className="text-xs text-stone-400 mt-2">版本 1.0.8</p>
+                                    <p className="text-xs text-stone-400 mt-2">版本 1.0.12</p>
                                 </div>
 
                                 <div className="space-y-3">
