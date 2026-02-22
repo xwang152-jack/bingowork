@@ -24,6 +24,13 @@
     "dist",
     "dist-electron"
   ],
+  "extraResources": [
+    {
+      "from": "resources/skills",
+      "to": "skills",
+      "filter": "**/*"
+    }
+  ],
   "mac": {
     "target": [
       {
