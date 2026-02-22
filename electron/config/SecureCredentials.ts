@@ -7,6 +7,19 @@ import keytar from 'keytar';
 
 const SERVICE_NAME = 'com.bingowork.app';
 
+// Check if keytar is available
+let keytarAvailable = true;
+try {
+  // Test keytar availability
+  if (typeof keytar.getPassword !== 'function') {
+    console.warn('[SecureCredentials] keytar module not properly loaded');
+    keytarAvailable = false;
+  }
+} catch (error) {
+  console.warn('[SecureCredentials] keytar module not available:', error);
+  keytarAvailable = false;
+}
+
 /**
  * Secure credential storage using system keychain
  * - Windows: Credential Manager
@@ -26,6 +39,11 @@ export class SecureCredentials {
       return await this.deleteApiKey(provider);
     }
 
+    if (!keytarAvailable) {
+      console.error('[SecureCredentials] keytar not available, cannot store API key');
+      return false;
+    }
+
     try {
       const account = `api-key-${provider}`;
       await keytar.setPassword(SERVICE_NAME, account, apiKey);
@@ -42,6 +60,11 @@ export class SecureCredentials {
    * @returns Promise that resolves with the API key or null if not found
    */
   static async getApiKey(provider: string): Promise<string | null> {
+    if (!keytarAvailable) {
+      console.error('[SecureCredentials] keytar not available, cannot retrieve API key');
+      return null;
+    }
+
     try {
       const account = `api-key-${provider}`;
       return await keytar.getPassword(SERVICE_NAME, account);
@@ -57,6 +80,11 @@ export class SecureCredentials {
    * @returns Promise that resolves to true if the key was deleted
    */
   static async deleteApiKey(provider: string): Promise<boolean> {
+    if (!keytarAvailable) {
+      console.error('[SecureCredentials] keytar not available, cannot delete API key');
+      return false;
+    }
+
     try {
       const account = `api-key-${provider}`;
       return await keytar.deletePassword(SERVICE_NAME, account);

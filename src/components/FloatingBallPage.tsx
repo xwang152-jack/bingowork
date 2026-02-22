@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { X, ArrowUp, ChevronDown, Home, History, Plus } from 'lucide-react';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import iconImage from '/icon.png';
 
 // UI Timeouts (ms)
 const UI_TIMEOUTS = {
@@ -324,7 +325,7 @@ export const FloatingBallPage = memo(function FloatingBallPage() {
                 <div className="relative w-14 h-14 group">
                     <div className="absolute inset-0 bg-amber-200/30 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="relative w-14 h-14 rounded-full bg-stone-800 flex items-center justify-center shadow-lg border border-stone-700 transition-transform hover:scale-105 overflow-hidden">
-                        <img src="/icon.png" alt="Logo" className="w-full h-full object-cover" />
+                        <img src={iconImage} alt="Logo" className="w-full h-full object-cover" />
                     </div>
                     {isProcessing && (
                         <div className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-orange-500 rounded-full animate-pulse border-2 border-white" />

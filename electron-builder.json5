@@ -5,6 +5,12 @@
   "asar": true,
   "productName": "Bingowork",
 
+  "asarUnpack": [
+    "**/node_modules/better-sqlite3/**",
+    "**/node_modules/keytar/**",
+    "**/node_modules/@modelcontextprotocol/sdk/**"
+  ],
+
   "directories": {
     "output": "release/${version}"
   },
@@ -20,20 +26,35 @@
   ],
   "mac": {
     "target": [
-      "dmg"
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
+      }
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+    "artifactName": "${productName}-Mac-${version}-${arch}.${ext}",
+    "icon": "build/icon.icns",
+    "category": "public.app-category.productivity",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist"
   },
   "win": {
     "target": [
       {
         "target": "nsis",
         "arch": [
-          "x64"
+          "x64",
+          "arm64"
         ]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
+    "artifactName": "${productName}-Windows-${version}-${arch}.${ext}",
+    "icon": "build/icon.ico"
   },
   "nsis": {
     "oneClick": false,
@@ -43,11 +64,40 @@
   },
   "linux": {
     "target": [
-      "AppImage",
-      "deb"
+      {
+        "target": "AppImage",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64", "arm64"]
+      }
     ],
-    "maintainer": "Safphere <a976466014@gmail.com>",
+    "maintainer": "Jack Wang <xwang152@163.com>",
+    "vendor": "Bingowork",
     "category": "Utility",
-    "artifactName": "${productName}-Linux-${version}.${ext}"
+    "artifactName": "${productName}-Linux-${version}-${arch}.${ext}",
+    "icon": "build/icons",
+    "synopsis": "AI-powered desktop assistant",
+    "description": "Bingowork transforms your PC into an AI-powered work assistant that supports any Agent-capable model.",
+    "desktop": {
+      "StartupNotify": true,
+      "Encoding": "UTF-8",
+      "Name": "Bingowork",
+      "Comment": "AI-powered desktop assistant",
+      "Categories": "Utility;Office;Development;",
+      "Keywords": "ai;assistant;chatgpt;claude;",
+      "X-GNOME-Autostart-enabled": true
+    }
+  },
+  "deb": {
+    "depends": [
+      "gconf2",
+      "gconf-service",
+      "libnotify4",
+      "libappindicator1",
+      "libxtst6",
+      "libnss3"
+    ]
   }
 }

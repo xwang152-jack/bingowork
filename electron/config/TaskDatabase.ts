@@ -15,7 +15,14 @@ export class TaskDatabase {
     constructor(dbFilePath?: string) {
         const baseDir = app.getPath('userData');
         const dbPath = dbFilePath || path.join(baseDir, 'bingowork.sqlite3');
-        this.db = new Database(dbPath);
+
+        try {
+            this.db = new Database(dbPath);
+        } catch (error) {
+            console.error('[TaskDatabase] Failed to initialize database:', error);
+            throw new Error(`Failed to open database at ${dbPath}. Please ensure the application has proper permissions.`);
+        }
+
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('foreign_keys = ON');
         this.migrate();

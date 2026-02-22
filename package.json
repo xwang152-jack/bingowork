@@ -19,7 +19,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "npm run build:icons && node scripts/pre-build-check.js && tsc && vite build && electron-builder",
+    "build:win": "npm run build:icons && node scripts/pre-build-check.js && npm run rebuild && tsc && vite build && electron-builder --win",
+    "build:mac": "npm run build:icons && node scripts/pre-build-check.js && npm run rebuild && tsc && vite build && electron-builder --mac",
+    "build:linux": "npm run build:icons && node scripts/pre-build-check.js && npm run rebuild && tsc && vite build && electron-builder --linux",
+    "build:icons": "node scripts/generate-icons.js",
+    "rebuild": "electron-rebuild -f -w better-sqlite3 -w keytar",
+    "check:native": "node scripts/detect-native-modules.js",
+    "check:build": "node scripts/pre-build-check.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -94,7 +101,8 @@
     "vite": "^5.1.6",
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.17",
+    "electron-rebuild": "^3.2.9"
   },
   "main": "dist-electron/main.js"
 }

@@ -36,6 +36,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install additional tools (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          # Install ImageMagick for icon generation
+          brew install imagemagick
+
+      - name: Install additional tools (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          # Install ImageMagick for icon generation
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Rebuild native modules
+        run: npm run rebuild
+
       - name: Lint
         run: npm run lint
 
